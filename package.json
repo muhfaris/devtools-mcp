@@ -1,0 +1,43 @@
+{
+  "name": "@muhfaris/devtools",
+  "version": "0.1.0",
+  "description": "DevTools MCP - Developer companion for AI assistants",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "devtools": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "prepublishOnly": "bun run build",
+    "inspect": "bunx @modelcontextprotocol/inspector bun src/index.ts"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^9.0.0",
+    "@gitbeaker/core": "^43.8.0",
+    "@gitbeaker/rest": "^43.8.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "commander": "^12.0.0",
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.24.4",
+    "nanoid": "^5.0.0",
+    "pg": "^8.23.0",
+    "ulid": "^2.3.0",
+    "uuid": "^10.0.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^2.5.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/uuid": "^10.0.0",
+    "prettier": "^3.3.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

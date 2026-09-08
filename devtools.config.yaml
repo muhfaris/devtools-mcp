@@ -1,0 +1,21 @@
+# DevTools MCP Configuration
+id_generator:
+  default: ulid
+
+database:
+  default_engine: postgresql
+  connections:
+    dev:
+      dsn: ${DEV_DATABASE_URL}
+      readonly: false
+
+security:
+  execute_query:
+    allow_write: false
+    blocked_env: [production, prod]
+
+# GitLab Integration
+gitlab:
+  url: https://gitlab.com # or your self-hosted instance
+  token: ${GITLAB_TOKEN} # Personal Access Token with api scope
+  projectId: 12345 # Your project ID

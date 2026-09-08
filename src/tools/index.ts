@@ -1,0 +1,52 @@
+import { ToolRegistry } from "../core/registry.js";
+import { Config } from "../core/types.js";
+import { generateUlidTool } from "./id-generators/ulid.js";
+import { generateUuidTool } from "./id-generators/uuid.js";
+import { base64EncodeTool, base64DecodeTool } from "./encoding/base64.js";
+import { jwtDecodeTool } from "./encoding/jwt.js";
+import { hashGenerateTool } from "./encoding/hash.js";
+import { secretGenerateTool } from "./encoding/secret.js";
+import { regexTestTool } from "./encoding/regex.js";
+import { cronParseTool } from "./misc/cron.js";
+import { timezoneConvertTool } from "./misc/timezone.js";
+import { semverBumpTool } from "./misc/semver.js";
+import { slugifyTool } from "./misc/slugify.js";
+import { getDbSchemaTool } from "./database/schema.js";
+import { executeQueryTool } from "./database/query.js";
+import { explainQueryTool } from "./database/explain.js";
+import { gitlabListMrsTool } from "./gitlab/list-mrs.js";
+import { gitlabGetMrTool } from "./gitlab/get-mr.js";
+import { gitlabCreateNoteTool } from "./gitlab/create-note.js";
+import { gitlabReviewMrTool } from "./gitlab/review-mr.js";
+import { gitlabGetDiscussionsTool } from "./gitlab/discussions.js";
+import { gitlabSetConfigTool } from "./gitlab/set-config.js";
+import { databaseSetConnectionTool } from "./database/set-connection.js";
+export { createRegistry } from "../core/registry.js";
+
+export const registerAllTools = async (
+  registry: ToolRegistry,
+  config: Config,
+) => {
+  registry.register(generateUlidTool);
+  registry.register(generateUuidTool);
+  registry.register(base64EncodeTool);
+  registry.register(base64DecodeTool);
+  registry.register(jwtDecodeTool);
+  registry.register(hashGenerateTool);
+  registry.register(secretGenerateTool);
+  registry.register(regexTestTool);
+  registry.register(cronParseTool);
+  registry.register(timezoneConvertTool);
+  registry.register(semverBumpTool);
+  registry.register(slugifyTool);
+  registry.register(gitlabListMrsTool);
+  registry.register(gitlabGetMrTool);
+  registry.register(gitlabCreateNoteTool);
+  registry.register(gitlabReviewMrTool);
+  registry.register(gitlabGetDiscussionsTool);
+  registry.register(getDbSchemaTool);
+  registry.register(executeQueryTool);
+  registry.register(explainQueryTool);
+  registry.register(gitlabSetConfigTool);
+  registry.register(databaseSetConnectionTool);
+};
