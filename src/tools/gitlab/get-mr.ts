@@ -10,7 +10,7 @@ import { formatGitLabError } from "../../providers/gitlab-error.js";
 export const gitlabGetMrTool: Tool = {
   name: "gitlab_get_mr",
   description:
-    "Get detailed merge request metadata, discussions, and file changes/diffs from GitLab. For deep code reviews with file-by-file suggestions, use gitlab_review_mr.",
+    "Get detailed merge request metadata, commits, discussions, and file changes/diffs from GitLab. For deep code reviews with file-by-file suggestions, use gitlab_review_mr.",
   params: {
     mr_url: {
       type: "string",
@@ -28,6 +28,12 @@ export const gitlabGetMrTool: Tool = {
       type: "number",
       optional: true,
       description: "Merge request IID (internal ID)",
+    },
+    include_commits: {
+      type: "boolean",
+      optional: true,
+      description: "Include list of commits in this MR (default: true)",
+      default: true,
     },
     include_diff: {
       type: "boolean",
@@ -69,6 +75,27 @@ export const gitlabGetMrTool: Tool = {
       // Get MR details
       const mr = await client.MergeRequests.show(projectId, mrId);
 
+      // Get commits
+      let commits: any[] = [];
+      if (params.include_commits !== false) {
+        try {
+          const mrCommits = await client.MergeRequests.allCommits(
+            projectId,
+            mrId,
+          );
+          commits = mrCommits.map((c: any) => ({
+            id: c.id,
+            shortId: c.short_id,
+            title: c.title,
+            message: c.message,
+            authorName: c.author_name,
+            createdAt: c.created_at,
+          }));
+        } catch {
+          commits = [];
+        }
+      }
+
       // Get changes/diff
       let diff: any[] = [];
       if (params.include_diff !== false) {
@@ -108,7 +135,9 @@ export const gitlabGetMrTool: Tool = {
         title: mr.title,
         description: mr.description,
         state: mr.state,
-        author: mr.author.username,
+        author: mr.author?.username,
+        sourceBranch: mr.source_branch,
+        targetBranch: mr.target_branch,
         assignees: mr.assignees?.map((a: any) => a.username) || [],
         reviewers: mr.reviewers?.map((r: any) => r.username) || [],
         labels: mr.labels || [],
@@ -129,6 +158,8 @@ export const gitlabGetMrTool: Tool = {
           approvalsLeft: mr.approvals?.approvals_left || 0,
         },
         pipeline: mr.head_pipeline?.status || null,
+        commitsCount: commits.length,
+        commits,
         diff: diff,
         discussions: discussions,
       };

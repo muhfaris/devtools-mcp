@@ -20,6 +20,7 @@ import { gitlabCreateNoteTool } from "./gitlab/create-note.js";
 import { gitlabReviewMrTool } from "./gitlab/review-mr.js";
 import { gitlabGetDiscussionsTool } from "./gitlab/discussions.js";
 import { gitlabGetFileTool } from "./gitlab/get-file.js";
+import { gitlabGetCommitsTool } from "./gitlab/get-commits.js";
 import { gitlabSetConfigTool } from "./gitlab/set-config.js";
 import { databaseSetConnectionTool } from "./database/set-connection.js";
 import { showConfigTool } from "./config/show.js";
@@ -48,6 +49,7 @@ export const registerAllTools = async (
   registry.register(gitlabReviewMrTool);
   registry.register(gitlabGetDiscussionsTool);
   registry.register(gitlabGetFileTool);
+  registry.register(gitlabGetCommitsTool);
   registry.register(getDbSchemaTool);
   registry.register(executeQueryTool);
   registry.register(explainQueryTool);
