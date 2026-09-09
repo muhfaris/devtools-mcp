@@ -221,6 +221,7 @@ bunx @modelcontextprotocol/inspector bun src/index.ts
 ```
 
 The Inspector opens a browser at `http://localhost:5173` where you can:
+
 - See all registered tools
 - Call tools with custom parameters
 - Inspect raw JSON-RPC messages
@@ -252,12 +253,12 @@ Desktop), add this to your `mcpServers` map:
 
 ## Environment variables reference
 
-| Variable | Required for | Description | Example |
-| :--- | :--- | :--- | :--- |
-| `GITLAB_TOKEN` | GitLab tools | Personal Access Token with `api` scope | `glpat-xxxxxxxx` |
-| `GITLAB_URL` | GitLab tools (optional) | GitLab instance URL | `https://gitlab.com` |
-| `DEV_DATABASE_URL` | Database tools | PostgreSQL/MySQL connection string | `postgresql://user:pass@localhost:5432/mydb` |
-| `STAGING_DATABASE_URL` | Database tools (optional) | Staging database connection | `postgresql://user:pass@staging:5432/mydb` |
+| Variable               | Required for              | Description                            | Example                                      |
+| :--------------------- | :------------------------ | :------------------------------------- | :------------------------------------------- |
+| `GITLAB_TOKEN`         | GitLab tools              | Personal Access Token with `api` scope | `glpat-xxxxxxxx`                             |
+| `GITLAB_URL`           | GitLab tools (optional)   | GitLab instance URL                    | `https://gitlab.com`                         |
+| `DEV_DATABASE_URL`     | Database tools            | PostgreSQL/MySQL connection string     | `postgresql://user:pass@localhost:5432/mydb` |
+| `STAGING_DATABASE_URL` | Database tools (optional) | Staging database connection            | `postgresql://user:pass@staging:5432/mydb`   |
 
 ---
 
@@ -285,10 +286,54 @@ which npx
 
 ### Database connection errors
 
-1. Check connection string format.
-2. Ensure database is running and accessible.
-3. Verify user/password and permissions.
-4. Test with a simple `psql` or `mysql` command.
+Use a URI-style DSN matching the configured `database.default_engine`:
+
+| Engine     | DSN format                                      | Example                                             |
+| ---------- | ----------------------------------------------- | --------------------------------------------------- |
+| PostgreSQL | `postgresql://USER:PASSWORD@HOST:PORT/DATABASE` | `postgresql://devuser:secret@localhost:5432/app_db` |
+| MySQL      | `mysql://USER:PASSWORD@HOST:PORT/DATABASE`      | `mysql://devuser:secret@localhost:3306/app_db`      |
+| MariaDB    | `mariadb://USER:PASSWORD@HOST:PORT/DATABASE`    | `mariadb://devuser:secret@localhost:3306/app_db`    |
+
+Example `.devtools/config.yaml` configurations:
+
+```yaml
+# PostgreSQL
+database:
+  default_engine: postgresql
+  connections:
+    local:
+      dsn: postgresql://devuser:secret@localhost:5432/app_db
+      readonly: true
+```
+
+```yaml
+# MySQL
+database:
+  default_engine: mysql
+  connections:
+    local:
+      dsn: mysql://devuser:secret@localhost:3306/app_db
+      readonly: true
+```
+
+```yaml
+# MariaDB (uses the MySQL-compatible provider)
+database:
+  default_engine: mariadb
+  connections:
+    local:
+      dsn: mariadb://devuser:secret@localhost:3306/app_db
+      readonly: true
+```
+
+Percent-encode reserved characters in credentials. For example, the password
+`p@ss:word` becomes `p%40ss%3Aword` in the DSN. Common optional query parameters
+include PostgreSQL `?sslmode=require` and MySQL/MariaDB `?ssl=true`.
+
+1. Confirm that the DSN scheme matches `default_engine`.
+2. Ensure the database is running and reachable on the configured host and port.
+3. Verify the database name, credentials, and permissions.
+4. Test connectivity with `psql` for PostgreSQL or `mysql` for MySQL/MariaDB.
 
 ### Schema introspection returns empty
 
