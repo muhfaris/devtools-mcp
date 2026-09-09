@@ -6,7 +6,7 @@ import { formatGitLabError } from "../../providers/gitlab-error.js";
 export const gitlabGetFileTool: Tool = {
   name: "gitlab_get_file",
   description:
-    "Get raw file content or line ranges from a remote GitLab repository without local cloning. Supports branch/commit refs and line slicing.",
+    "Get raw file content, line ranges, or grep patterns/symbols from a remote GitLab repository without local cloning.",
   params: {
     mr_url: {
       type: "string",
@@ -31,6 +31,12 @@ export const gitlabGetFileTool: Tool = {
       description:
         "Branch name, tag, or commit SHA. Default: 'main' or project default branch.",
       default: "main",
+    },
+    pattern: {
+      type: "string",
+      optional: true,
+      description:
+        "Regex pattern or substring to grep within the file (e.g. '^func ' or 'GetDeadline')",
     },
     start_line: {
       type: "number",
@@ -85,6 +91,42 @@ export const gitlabGetFileTool: Tool = {
       const allLines = content.split("\n");
       const totalLines = allLines.length;
 
+      // Pattern / Grep matching mode
+      if (params.pattern) {
+        let regex: RegExp;
+        try {
+          regex = new RegExp(params.pattern);
+        } catch {
+          regex = new RegExp(
+            params.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          );
+        }
+
+        const matches: Array<{ line: number; text: string }> = [];
+        allLines.forEach((text, idx) => {
+          if (regex.test(text)) {
+            matches.push({ line: idx + 1, text });
+          }
+        });
+
+        const grepResult = {
+          fileName: file.file_name,
+          filePath: file.file_path,
+          ref: file.ref,
+          totalLines,
+          pattern: params.pattern,
+          totalMatches: matches.length,
+          matches,
+        };
+
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(grepResult, null, 2) },
+          ],
+        };
+      }
+
+      // Line slicing mode
       let slicedContent = content;
       let startLine = 1;
       let endLine = totalLines;
