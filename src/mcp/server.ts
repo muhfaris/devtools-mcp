@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ToolRegistry } from "../core/registry.js";
 import type { ToolParamSchema } from "../core/types.js";
+import { stringifyToolError } from "../core/errors.js";
 import { z } from "zod";
 
 const jsonValueSchema: z.ZodType = z.lazy(() =>
@@ -75,9 +76,9 @@ export const startMcpServer = async (registry: ToolRegistry) => {
               { type: "text", text: JSON.stringify(result) },
             ],
           };
-        } catch (err: any) {
+        } catch (error: unknown) {
           return {
-            content: [{ type: "text", text: `Error: ${err.message}` }],
+            content: [{ type: "text", text: stringifyToolError(error) }],
             isError: true,
           };
         }

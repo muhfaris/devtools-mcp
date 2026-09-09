@@ -1,5 +1,6 @@
 import { reloadRuntimeConfig } from "../../core/runtime-config.js";
 import type { Tool } from "../../core/types.js";
+import { ToolError } from "../../core/errors.js";
 import { getSafeConfigView } from "./show.js";
 
 export const reloadConfigTool: Tool = {
@@ -7,13 +8,27 @@ export const reloadConfigTool: Tool = {
   description:
     "Reload .devtools/config.yaml, replace session overrides, and show the effective configuration",
   execute: async () => {
-    const config = await reloadRuntimeConfig();
+    let config;
+    try {
+      config = await reloadRuntimeConfig();
+    } catch (error: unknown) {
+      throw new ToolError(
+        "CONFIG_RELOAD_FAILED",
+        "Configuration reload failed; the previous valid runtime configuration remains active.",
+        "Correct .devtools/config.yaml, then retry reload_config.",
+        true,
+        { configKey: ".devtools/config.yaml", cause: error },
+      );
+    }
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify(
-            { reloaded: true, ...getSafeConfigView(config) },
+            {
+              ok: true,
+              data: { reloaded: true, ...getSafeConfigView(config) },
+            },
             null,
             2,
           ),

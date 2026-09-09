@@ -1,5 +1,10 @@
 import { Tool } from "../../core/types.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import { ToolError } from "../../core/errors.js";
+import {
+  getGitLabClient,
+  getGitLabWebUrl,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
 
 export const gitlabCreateNoteTool: Tool = {
   name: "gitlab_create_note",
@@ -44,7 +49,13 @@ export const gitlabCreateNoteTool: Tool = {
   execute: async (params) => {
     const config = (global as any).__devtools_config;
     if (!config?.gitlab) {
-      throw new Error("GitLab not configured in .devtools/config.yaml");
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab configuration is required.",
+        "Configure GitLab with gitlab_set_config, then retry this tool.",
+        true,
+        { configKey: "gitlab", setupTool: "gitlab_set_config" },
+      );
     }
 
     const client = getGitLabClient();
@@ -53,11 +64,23 @@ export const gitlabCreateNoteTool: Tool = {
     const body = params.body || "";
 
     if (!mrId || isNaN(mrId)) {
-      throw new Error("Valid MR ID is required");
+      throw new ToolError(
+        "GITLAB_MR_ID_REQUIRED",
+        "A valid GitLab merge request ID is required.",
+        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
+        true,
+        { parameter: "mr_id" },
+      );
     }
 
     if (!body || body.trim() === "") {
-      throw new Error("Comment body is required");
+      throw new ToolError(
+        "INVALID_ARGUMENT",
+        "A comment body is required.",
+        "Provide non-empty comment text in body, then retry this tool.",
+        true,
+        { parameter: "body" },
+      );
     }
 
     try {
@@ -105,7 +128,7 @@ export const gitlabCreateNoteTool: Tool = {
         body: response.body,
         author: response.author.username,
         createdAt: response.created_at,
-        url: `https://gitlab.com/${config.gitlab.projectId}/merge_requests/${mrId}#note_${response.id}`,
+        url: `${getGitLabWebUrl(config, projectId)}/-/merge_requests/${mrId}#note_${response.id}`,
         success: true,
       };
 
@@ -113,7 +136,14 @@ export const gitlabCreateNoteTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      throw new Error(`Failed to create note: ${error.message}`);
+      if (error instanceof ToolError) throw error;
+      throw new ToolError(
+        "GITLAB_REQUEST_FAILED",
+        "GitLab could not create the merge request note.",
+        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
+        false,
+        { cause: error },
+      );
     }
   },
 };

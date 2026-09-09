@@ -1,10 +1,6 @@
 import { Tool } from "../../core/types.js";
-import { MissingConfigError } from "../../core/errors.js";
-import {
-  getGitLabClient,
-  resolveProjectId,
-  getGitLabConfig,
-} from "../../providers/gitlab.js";
+import { ToolError } from "../../core/errors.js";
+import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 
 export const gitlabListMrsTool: Tool = {
   name: "gitlab_list_mrs",
@@ -56,22 +52,13 @@ export const gitlabListMrsTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config) {
-      throw new MissingConfigError(
-        "gitlab",
-        "GitLab is not configured. Please set your GitLab token.",
-        "gitlab_set_config",
-        { url: "https://gitlab.com", projectId: "" },
-      );
-    }
-
-    // Check if GitLab is configured
-    if (!config.gitlab) {
-      throw new MissingConfigError(
-        "gitlab.token",
-        "GitLab token is missing. Please provide your personal access token.",
-        "gitlab_set_config",
-        { token: "" },
+    if (!config?.gitlab) {
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab configuration is required.",
+        "Configure GitLab with gitlab_set_config, then retry this tool.",
+        true,
+        { configKey: "gitlab", setupTool: "gitlab_set_config" },
       );
     }
     // Priority: params.project_id > config.gitlab.projectId > error
@@ -126,7 +113,14 @@ export const gitlabListMrsTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(summary, null, 2) }],
       };
     } catch (error: any) {
-      throw new Error(`Failed to list merge requests: ${error.message}`);
+      if (error instanceof ToolError) throw error;
+      throw new ToolError(
+        "GITLAB_REQUEST_FAILED",
+        "GitLab could not list merge requests.",
+        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
+        false,
+        { cause: error },
+      );
     }
   },
 };

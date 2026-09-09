@@ -1,4 +1,5 @@
 import { Tool } from "../../core/types.js";
+import { ToolError } from "../../core/errors.js";
 import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 
 export const gitlabGetDiscussionsTool: Tool = {
@@ -24,7 +25,13 @@ export const gitlabGetDiscussionsTool: Tool = {
   execute: async (params) => {
     const config = (global as any).__devtools_config;
     if (!config?.gitlab) {
-      throw new Error("GitLab not configured in .devtools/config.yaml");
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab configuration is required.",
+        "Configure GitLab with gitlab_set_config, then retry this tool.",
+        true,
+        { configKey: "gitlab", setupTool: "gitlab_set_config" },
+      );
     }
 
     const client = getGitLabClient();
@@ -32,7 +39,13 @@ export const gitlabGetDiscussionsTool: Tool = {
     const mrId = Number(params.mr_id);
 
     if (!mrId || isNaN(mrId)) {
-      throw new Error("Valid MR ID is required");
+      throw new ToolError(
+        "GITLAB_MR_ID_REQUIRED",
+        "A valid GitLab merge request ID is required.",
+        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
+        true,
+        { parameter: "mr_id" },
+      );
     }
 
     try {
@@ -69,7 +82,14 @@ export const gitlabGetDiscussionsTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      throw new Error(`Failed to get discussions: ${error.message}`);
+      if (error instanceof ToolError) throw error;
+      throw new ToolError(
+        "GITLAB_REQUEST_FAILED",
+        "GitLab could not get merge request discussions.",
+        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
+        false,
+        { cause: error },
+      );
     }
   },
 };

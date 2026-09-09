@@ -1,4 +1,5 @@
 import { Gitlab } from "@gitbeaker/rest";
+import { ToolError } from "../core/errors.js";
 import type { Config } from "../core/types.js";
 
 let gitlabClient: Gitlab | null = null;
@@ -6,22 +7,27 @@ let projectId: string | number | null = null;
 
 export const initGitLab = (config: Config) => {
   if (!config.gitlab) {
-    throw new Error("GitLab configuration missing in .devtools/config.yaml");
-  }
-
-  const { url, token, projectId: pid } = config.gitlab;
-
-  if (!token) {
-    throw new Error(
-      "GitLab token is required. Set GITLAB_TOKEN in environment or config.",
+    throw new ToolError(
+      "CONFIG_REQUIRED",
+      "GitLab configuration is required.",
+      "Configure GitLab with gitlab_set_config, then retry this tool.",
+      true,
+      { configKey: "gitlab", setupTool: "gitlab_set_config" },
     );
   }
 
-  gitlabClient = new Gitlab({
-    host: url || "https://gitlab.com",
-    token: token,
-  });
+  const { url, token, projectId: pid } = config.gitlab;
+  if (!token) {
+    throw new ToolError(
+      "GITLAB_TOKEN_REQUIRED",
+      "A GitLab access token is required.",
+      "Ask the user to configure a GitLab access token with gitlab_set_config, then retry this tool.",
+      true,
+      { configKey: "gitlab.token", setupTool: "gitlab_set_config" },
+    );
+  }
 
+  gitlabClient = new Gitlab({ host: url || "https://gitlab.com", token });
   projectId = pid;
   return { client: gitlabClient, projectId };
 };
@@ -33,35 +39,59 @@ export const clearGitLab = () => {
 
 export const getGitLabClient = () => {
   if (!gitlabClient) {
-    throw new Error("GitLab client not initialized. Call initGitLab() first.");
+    throw new ToolError(
+      "CONFIG_REQUIRED",
+      "GitLab is not initialized.",
+      "Configure GitLab with gitlab_set_config, then retry this tool.",
+      true,
+      { configKey: "gitlab", setupTool: "gitlab_set_config" },
+    );
   }
   return gitlabClient;
 };
 
 export const getProjectId = () => {
   if (!projectId) {
-    throw new Error("GitLab project ID not set in config.");
+    throw createProjectIdRequiredError();
   }
   return projectId;
 };
 
+const createProjectIdRequiredError = () =>
+  new ToolError(
+    "GITLAB_PROJECT_ID_REQUIRED",
+    "GitLab project ID is required.",
+    "Ask the user for the numeric GitLab project ID, then retry this tool with project_id. Do not switch to local Git.",
+    true,
+    { parameter: "project_id", configKey: "gitlab.projectId" },
+  );
+
 export const resolveProjectId = (
-  params: Record<string, any>,
+  params: Record<string, unknown>,
   config: Config,
 ) => {
-  // Priority: params.project_id > config.gitlab.projectId > error
   const id = params.project_id ?? config.gitlab?.projectId;
-  if (!id) {
-    throw new Error(
-      "Project ID required. Set 'projectId' in config or pass 'project_id' parameter.",
-    );
-  }
-  return id;
+  if (!id) throw createProjectIdRequiredError();
+  return id as string | number;
 };
 
 export const getGitLabConfig = (config: Config) => {
   if (!config.gitlab) {
-    throw new Error("GitLab configuration missing in .devtools/config.yaml");
+    throw new ToolError(
+      "CONFIG_REQUIRED",
+      "GitLab configuration is required.",
+      "Configure GitLab with gitlab_set_config, then retry this tool.",
+      true,
+      { configKey: "gitlab", setupTool: "gitlab_set_config" },
+    );
   }
   return config.gitlab;
+};
+
+export const getGitLabWebUrl = (
+  config: Config,
+  resolvedProjectId: string | number,
+) => {
+  const host = (config.gitlab?.url || "https://gitlab.com").replace(/\/$/, "");
+  return `${host}/${resolvedProjectId}`;
 };

@@ -1,5 +1,11 @@
 import { Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
+import { ToolError } from "../../core/errors.js";
+import {
+  databaseRequestError,
+  requireDatabaseConnection,
+  requireQuery,
+} from "./errors.js";
 
 export const executeQueryTool: Tool = {
   name: "execute_query",
@@ -33,32 +39,22 @@ export const executeQueryTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config?.database?.connections) {
-      throw new Error(
-        "No database connections configured in .devtools/config.yaml",
-      );
-    }
-
-    const connectionName =
-      params.connection || Object.keys(config.database.connections)[0];
-    if (!connectionName) {
-      throw new Error("No database connections found in config");
-    }
-
-    const connConfig = config.database.connections[connectionName];
-    if (!connConfig) {
-      throw new Error(`Connection "${connectionName}" not found in config`);
-    }
+    const { connectionName, connection: connConfig } =
+      requireDatabaseConnection(config, params.connection);
 
     // Security: Check if write is allowed
-    const query = (params.query || "").trim();
+    const query = requireQuery(params.query);
     const isWrite = !/^\s*SELECT/i.test(query);
 
     if (isWrite) {
       const allowWrite = config.security?.execute_query?.allow_write || false;
       if (!allowWrite) {
-        throw new Error(
-          "Write queries are disabled by default. Set `security.execute_query.allow_write: true` in config to enable.",
+        throw new ToolError(
+          "DATABASE_WRITE_DISABLED",
+          "Database write queries are disabled.",
+          "Ask the user to enable security.execute_query.allow_write if this write is intentional, then retry this tool.",
+          true,
+          { configKey: "security.execute_query.allow_write" },
         );
       }
       // Check blocked environments
@@ -72,8 +68,12 @@ export const executeQueryTool: Tool = {
           connectionName.toLowerCase().includes(env),
         )
       ) {
-        throw new Error(
-          `Write queries are blocked on "${connectionName}" environment.`,
+        throw new ToolError(
+          "DATABASE_ENVIRONMENT_BLOCKED",
+          `Database writes are blocked for connection "${connectionName}".`,
+          "Choose an explicitly permitted configured connection; do not retry against this connection.",
+          false,
+          { parameter: "connection" },
         );
       }
     }
@@ -108,7 +108,7 @@ export const executeQueryTool: Tool = {
       };
     } catch (error: any) {
       await provider.disconnect().catch(() => {});
-      throw new Error(`Query execution failed: ${error.message}`);
+      throw databaseRequestError("execute the query", error);
     }
   },
 };

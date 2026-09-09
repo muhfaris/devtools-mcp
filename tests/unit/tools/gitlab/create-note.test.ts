@@ -1,0 +1,63 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { gitlabCreateNoteTool } from "../../../../src/tools/gitlab/create-note.js";
+import { parseToolJson } from "../../../helpers/tools-test-helper.js";
+import { ToolError } from "../../../../src/core/errors.js";
+
+const originalConfig = (global as any).__devtools_config;
+
+afterEach(() => {
+  (global as any).__devtools_config = originalConfig;
+});
+
+describe("gitlab_create_note", () => {
+  it("uses custom host and per-call project_id for note URLs", async () => {
+    const mockCreate = vi.fn().mockResolvedValue({
+      id: 555,
+      body: "LGTM",
+      author: { username: "tester" },
+      created_at: "2026-09-09T00:00:00Z",
+    });
+
+    (global as any).__devtools_config = {
+      gitlab: {
+        url: "https://gitlab.example.org",
+        token: "token",
+        projectId: 100,
+      },
+    };
+
+    // Mock client
+    const gitlabMod = await import("../../../../src/providers/gitlab.js");
+    gitlabMod.initGitLab((global as any).__devtools_config);
+    const client = gitlabMod.getGitLabClient();
+    (client as any).MergeRequestNotes = {
+      create: mockCreate,
+    };
+
+    const res = await parseToolJson(gitlabCreateNoteTool, {
+      project_id: 200,
+      mr_id: 12,
+      body: "LGTM",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(200, 12, "LGTM");
+    expect(res.url).toBe("https://gitlab.example.org/200/-/merge_requests/12#note_555");
+  });
+
+  it("throws INVALID_ARGUMENT when body is empty", async () => {
+    (global as any).__devtools_config = {
+      gitlab: {
+        url: "https://gitlab.com",
+        token: "token",
+        projectId: 100,
+      },
+    };
+
+    await expect(
+      gitlabCreateNoteTool.execute({ mr_id: 12, body: "   " }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      parameter: "body",
+    });
+  });
+});

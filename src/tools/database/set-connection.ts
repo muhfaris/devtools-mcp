@@ -32,6 +32,7 @@ export const databaseSetConnectionTool: Tool = {
     if (!config.database)
       config.database = { default_engine: "postgresql", connections: {} };
     if (!config.database.connections) config.database.connections = {};
+    (global as any).__devtools_config = config;
 
     const name = params.name;
     const dsn = params.dsn;
@@ -50,7 +51,10 @@ export const databaseSetConnectionTool: Tool = {
       content: [
         {
           type: "text",
-          text: `✅ Database connection '${name}' added successfully.`,
+          text: JSON.stringify({
+            ok: true,
+            data: { updated: true, name, engine },
+          }),
         },
       ],
     };

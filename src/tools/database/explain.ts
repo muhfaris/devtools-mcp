@@ -1,5 +1,10 @@
 import { Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
+import {
+  databaseRequestError,
+  requireDatabaseConnection,
+  requireQuery,
+} from "./errors.js";
 
 export const explainQueryTool: Tool = {
   name: "explain_query",
@@ -24,27 +29,10 @@ export const explainQueryTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config?.database?.connections) {
-      throw new Error(
-        "No database connections configured in .devtools/config.yaml",
-      );
-    }
+    const { connectionName, connection: connConfig } =
+      requireDatabaseConnection(config, params.connection);
 
-    const connectionName =
-      params.connection || Object.keys(config.database.connections)[0];
-    if (!connectionName) {
-      throw new Error("No database connections found in config");
-    }
-
-    const connConfig = config.database.connections[connectionName];
-    if (!connConfig) {
-      throw new Error(`Connection "${connectionName}" not found in config`);
-    }
-
-    const query = (params.query || "").trim();
-    if (!query) {
-      throw new Error("Query is required");
-    }
+    const query = requireQuery(params.query);
 
     const engine = config.database.default_engine || "postgresql";
     const provider = createProvider(engine);
@@ -78,7 +66,7 @@ export const explainQueryTool: Tool = {
       };
     } catch (error: any) {
       await provider.disconnect().catch(() => {});
-      throw new Error(`EXPLAIN failed: ${error.message}`);
+      throw databaseRequestError("explain the query", error);
     }
   },
 };

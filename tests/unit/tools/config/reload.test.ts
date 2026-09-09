@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseToolJson } from "../../../helpers/tools-test-helper.js";
+import { ToolError } from "../../../../src/core/errors.js";
 
 vi.mock("../../../../src/core/runtime-config.js", async (importOriginal) => {
   const actual =
@@ -23,7 +24,7 @@ afterEach(() => {
 });
 
 describe("reload_config", () => {
-  it("returns the newly loaded safe configuration", async () => {
+  it("returns the newly loaded safe configuration in success envelope", async () => {
     vi.mocked(reloadRuntimeConfig).mockResolvedValue({
       database: {
         default_engine: "mysql",
@@ -38,17 +39,20 @@ describe("reload_config", () => {
 
     const result = await parseToolJson(reloadConfigTool, {});
 
-    expect(result.reloaded).toBe(true);
-    expect(result.database.default_engine).toBe("mysql");
-    expect(result.database.connections.staging.dsn).not.toContain("secret");
+    expect(result.ok).toBe(true);
+    expect(result.data.reloaded).toBe(true);
+    expect(result.data.database.default_engine).toBe("mysql");
+    expect(result.data.database.connections.staging.dsn).not.toContain("secret");
   });
 
-  it("propagates reload failures", async () => {
+  it("propagates reload failures as ToolError", async () => {
     vi.mocked(reloadRuntimeConfig).mockRejectedValue(
       new Error("config missing"),
     );
-    await expect(reloadConfigTool.execute({})).rejects.toThrow(
-      "config missing",
-    );
+    await expect(reloadConfigTool.execute({})).rejects.toThrowError(ToolError);
+    await expect(reloadConfigTool.execute({})).rejects.toMatchObject({
+      code: "CONFIG_RELOAD_FAILED",
+      retryable: true,
+    });
   });
 });

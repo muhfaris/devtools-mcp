@@ -1,6 +1,6 @@
 import { Tool } from "../../core/types.js";
 import { createProvider, type DBProvider } from "../../providers/index.js";
-import { MissingConfigError } from "../../core/errors.js";
+import { databaseRequestError, requireDatabaseConnection } from "./errors.js";
 
 // Cache for schema introspection (per connection, TTL 60s)
 const schemaCache = new Map<string, { data: any; timestamp: number }>();
@@ -32,29 +32,8 @@ export const getDbSchemaTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config?.database?.connections) {
-      throw new MissingConfigError(
-        "database.connections",
-        "No database connections configured. Please set a connection.",
-        "database_set_connection",
-        {
-          name: "dev",
-          dsn: "postgresql://user:pass@localhost:5432/db",
-          engine: "postgresql",
-        },
-      );
-    }
-
-    const connectionName =
-      params.connection || Object.keys(config.database.connections)[0];
-    if (!connectionName) {
-      throw new Error("No database connections found in config");
-    }
-
-    const connConfig = config.database.connections[connectionName];
-    if (!connConfig) {
-      throw new Error(`Connection "${connectionName}" not found in config`);
-    }
+    const { connectionName, connection: connConfig } =
+      requireDatabaseConnection(config, params.connection);
 
     const engine = config.database.default_engine || "postgresql";
     const provider = createProvider(engine);
@@ -95,7 +74,7 @@ export const getDbSchemaTool: Tool = {
       };
     } catch (error: any) {
       await provider.disconnect().catch(() => {});
-      throw new Error(`Schema introspection failed: ${error.message}`);
+      throw databaseRequestError("introspect the schema", error);
     }
   },
 };
