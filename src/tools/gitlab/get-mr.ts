@@ -152,10 +152,12 @@ export const gitlabGetMrTool: Tool = {
         wip: mr.wip || false,
         draft: mr.draft || false,
         approvals: {
-          approved: mr.approvals?.approved || false,
+          approved: (mr as any).approvals?.approved || false,
           approvedBy:
-            mr.approvals?.approved_by?.map((a: any) => a.user.username) || [],
-          approvalsLeft: mr.approvals?.approvals_left || 0,
+            (mr as any).approvals?.approved_by?.map(
+              (a: any) => a.user.username,
+            ) || [],
+          approvalsLeft: (mr as any).approvals?.approvals_left || 0,
         },
         pipeline: mr.head_pipeline?.status || null,
         commitsCount: commits.length,

@@ -95,13 +95,11 @@ export const gitlabCreateNoteTool: Tool = {
           throw new Error("Could not determine commit SHA for code comment");
         }
 
-        response = await client.MergeRequestNotes.create(
+        response = await (client.MergeRequestNotes.create as any)(
           projectId,
           mrId,
           body,
           {
-            line: Number(params.line),
-            path: params.path,
             position: {
               base_sha: mr.diff_refs?.base_sha || sha,
               head_sha: mr.diff_refs?.head_sha || sha,

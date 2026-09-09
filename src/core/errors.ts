@@ -4,7 +4,7 @@ export type JsonValue =
   | boolean
   | null
   | JsonValue[]
-  | { [key: string]: JsonValue };
+  | { [key: string]: any };
 
 export type ToolErrorMetadata = {
   parameter?: string;
@@ -49,12 +49,16 @@ const sanitizeValue = (value: unknown): JsonValue | undefined => {
       .filter((item): item is JsonValue => item !== undefined);
   }
   if (typeof value === "object" && value) {
-    const sanitized = Object.entries(value).flatMap(([key, item]) => {
-      if (sensitiveKey.test(key)) return [];
-      const safeItem = sanitizeValue(item);
-      return safeItem === undefined ? [] : [[key, safeItem] as const];
-    });
-    return Object.fromEntries(sanitized);
+    const result: Record<string, any> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (!sensitiveKey.test(key)) {
+        const safeItem = sanitizeValue(item);
+        if (safeItem !== undefined) {
+          result[key] = safeItem;
+        }
+      }
+    }
+    return result;
   }
   return undefined;
 };

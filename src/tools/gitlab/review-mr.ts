@@ -154,7 +154,6 @@ function detectLanguage(filePath: string): string {
     bash: "Bash",
     zsh: "Zsh",
     sql: "SQL",
-    rs: "Rust",
   };
   return map[ext] || ext || "Unknown";
 }
@@ -172,24 +171,8 @@ function estimateComplexity(
   ).length;
   const total = addedLines + deletedLines;
 
-  // Count functions/classes added
-  const functionKeywords = [
-    "function",
-    "class",
-    "interface",
-    "type",
-    "const",
-    "let",
-    "var",
-    "export",
-    "import",
-  ];
-  const functionCount = lines.filter(
-    (l) => l.startsWith("+") && functionKeywords.some((kw) => l.includes(kw)),
-  ).length;
-
-  if (total > 200 || functionCount > 5) return "high";
-  if (total > 50 || functionCount > 2) return "medium";
+  if (total > 100) return "high";
+  if (total > 30) return "medium";
   return "low";
 }
 
@@ -197,62 +180,55 @@ function generateSuggestions(diff: string, language: string): string[] {
   const suggestions: string[] = [];
   const lines = diff.split("\n");
 
-  // Look for potential issues
   for (const line of lines) {
-    if (line.startsWith("+")) {
-      const clean = line.substring(1).trim();
+    if (!line.startsWith("+") || line.startsWith("+++")) continue;
 
-      // Check for console.log
-      if (clean.includes("console.log") || clean.includes("console.debug")) {
-        suggestions.push(
-          "⚠️ Remove console.log/debug statements before merging",
-        );
-      }
+    // Check for console.log/print
+    if (/console\.(log|debug|info)/.test(line)) {
+      suggestions.push("Found console.log - consider removing before merge");
+    }
+    if (/fmt\.Println|println!/.test(line)) {
+      suggestions.push("Found print statement - consider using proper logging");
+    }
 
-      // Check for TODO
-      if (clean.includes("TODO") || clean.includes("FIXME")) {
-        suggestions.push("📌 TODO/FIXME found - address before merging");
-      }
+    // Check for TODO/FIXME
+    if (/TODO|FIXME|HACK|XXX/.test(line)) {
+      suggestions.push("Contains TODO/FIXME comment");
+    }
 
-      // Check for hardcoded values
-      if (clean.includes("localhost") || clean.includes("127.0.0.1")) {
-        suggestions.push(
-          "⚠️ Hardcoded localhost URL detected - consider using environment variables",
-        );
-      }
+    // Check for hardcoded secrets patterns
+    if (
+      /(password|secret|api[_-]?key|token)\s*[:=]\s*["'][^"']+["']/i.test(line)
+    ) {
+      suggestions.push("⚠️ Potential hardcoded secret detected");
+    }
 
-      // Check for SQL injection risk
-      if (language === "JavaScript" || language === "TypeScript") {
-        if (
-          clean.includes("query") &&
-          !clean.includes("prepared") &&
-          !clean.includes("placeholder")
-        ) {
-          suggestions.push(
-            "🛡️ SQL query detected - ensure you're using parameterized queries",
-          );
-        }
-      }
+    // Check for any type in TS
+    if (language.includes("TypeScript") && /:\s*any\b/.test(line)) {
+      suggestions.push("Use of 'any' type - consider using a specific type");
     }
   }
 
-  if (suggestions.length === 0) {
-    suggestions.push("✅ No obvious issues detected in the diff");
-  }
-
-  return suggestions.slice(0, 5);
+  return [...new Set(suggestions)];
 }
 
 function generateReviewSummary(files: any[], mr: any): string {
   const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
   const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
+
   const highComplexity = files.filter((f) => f.complexity === "high");
   const mediumComplexity = files.filter((f) => f.complexity === "medium");
 
-  let summary = `## MR Review Summary\n\n`;
-  summary += `- **MR:** #${mr.iid} - "${mr.title}"\n`;
-  summary += `- **Author:** ${mr.author}\n`;
-  summary += `- **State:** ${mr.state}\n\n`;
+  const allSuggestions = files.flatMap((f) =>
+    f.suggestions.map((s: string) => `\`${f.file}\`: ${s}`),
+  );
+
+  let summary = `## MR Review: !${mr.iid} - ${mr.title}\n\n`;
+  summary += `### Overview\n`;
+  summary += `- **Author:** @${mr.author.username}\n`;
+  summary += `- **State:** ${mr.state}\n`;
+  summary += `- **URL:** ${mr.web_url}\n\n`;
+
   summary += `### Changes\n`;
   summary += `- **Files:** ${files.length}\n`;
   summary += `- **Additions:** +${totalAdditions}\n`;
@@ -270,6 +246,14 @@ function generateReviewSummary(files: any[], mr: any): string {
     summary += `### 📊 Medium Complexity Files\n`;
     for (const file of mediumComplexity) {
       summary += `- \`${file.file}\` (${file.language})\n`;
+    }
+    summary += `\n`;
+  }
+
+  if (allSuggestions.length > 0) {
+    summary += `### 💡 Suggestions & Warnings\n`;
+    for (const s of allSuggestions.slice(0, 10)) {
+      summary += `- ${s}\n`;
     }
     summary += `\n`;
   }
