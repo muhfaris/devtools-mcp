@@ -21,6 +21,8 @@ import { gitlabReviewMrTool } from "./gitlab/review-mr.js";
 import { gitlabGetDiscussionsTool } from "./gitlab/discussions.js";
 import { gitlabSetConfigTool } from "./gitlab/set-config.js";
 import { databaseSetConnectionTool } from "./database/set-connection.js";
+import { showConfigTool } from "./config/show.js";
+import { reloadConfigTool } from "./config/reload.js";
 export { createRegistry } from "../core/registry.js";
 
 export const registerAllTools = async (
@@ -49,4 +51,6 @@ export const registerAllTools = async (
   registry.register(explainQueryTool);
   registry.register(gitlabSetConfigTool);
   registry.register(databaseSetConnectionTool);
+  registry.register(showConfigTool);
+  registry.register(reloadConfigTool);
 };

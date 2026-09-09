@@ -3,7 +3,7 @@ export type ToolParamSchema = {
   optional?: boolean;
   description?: string;
   default?: any;
-  items?: ToolParamSchema;
+  items?: Partial<ToolParamSchema>;
 };
 
 export type ToolParams = Record<string, any>;

@@ -1,23 +1,15 @@
 #!/usr/bin/env node
 import { program } from "commander";
 import { watch } from "fs";
-import { loadConfig, reloadConfig, getConfigPath } from "./core/config.js";
+import { loadConfig, getConfigPath } from "./core/config.js";
 import { createRegistry, registerAllTools } from "./tools/index.js";
 import { startMcpServer } from "./mcp/server.js";
-import { initGitLab, clearGitLab } from "./providers/gitlab.js";
+import {
+  applyRuntimeConfig,
+  reloadRuntimeConfig,
+} from "./core/runtime-config.js";
 
-const applyConfig = (config: any) => {
-  (global as any).__devtools_config = config;
-  if (config.gitlab) {
-    try {
-      initGitLab(config);
-    } catch (error: any) {
-      console.warn("⚠️ GitLab re-init failed:", error.message);
-    }
-  } else {
-    clearGitLab();
-  }
-};
+const applyConfig = (config: any) => applyRuntimeConfig(config);
 
 const startWatcher = () => {
   const path = getConfigPath();
@@ -27,8 +19,7 @@ const startWatcher = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
       try {
-        const next = await reloadConfig();
-        applyConfig(next);
+        await reloadRuntimeConfig();
         console.warn("🔄 .devtools/config.yaml reloaded");
       } catch (error: any) {
         console.warn("⚠️ Config reload failed:", error.message);

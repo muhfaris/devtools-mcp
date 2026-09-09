@@ -31,7 +31,7 @@ export const createToolParamSchema = (param: ToolParamSchema): z.ZodTypeAny => {
     case "array":
       schema = z.array(
         param.items && "type" in param.items
-          ? createToolParamSchema(param.items)
+          ? createToolParamSchema(param.items as ToolParamSchema)
           : jsonValueSchema,
       );
       break;
