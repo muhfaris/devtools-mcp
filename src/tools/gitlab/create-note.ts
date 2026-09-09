@@ -1,10 +1,15 @@
 import { Tool } from "../../core/types.js";
-import { getGitLabClient, getProjectId } from "../../providers/gitlab.js";
+import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 
 export const gitlabCreateNoteTool: Tool = {
   name: "gitlab_create_note",
   description: "Add a comment/note to a merge request",
   params: {
+    project_id: {
+      type: "number",
+      optional: true,
+      description: "GitLab project ID. Overrides config default.",
+    },
     mr_id: {
       type: "number",
       description: "Merge request IID (internal ID)",
@@ -39,11 +44,11 @@ export const gitlabCreateNoteTool: Tool = {
   execute: async (params) => {
     const config = (global as any).__devtools_config;
     if (!config?.gitlab) {
-      throw new Error("GitLab not configured in devtools.config.yaml");
+      throw new Error("GitLab not configured in .devtools/config.yaml");
     }
 
     const client = getGitLabClient();
-    const projectId = getProjectId();
+    const projectId = resolveProjectId(params, config);
     const mrId = Number(params.mr_id);
     const body = params.body || "";
 

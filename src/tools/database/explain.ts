@@ -26,7 +26,7 @@ export const explainQueryTool: Tool = {
     const config = (global as any).__devtools_config;
     if (!config?.database?.connections) {
       throw new Error(
-        "No database connections configured in devtools.config.yaml",
+        "No database connections configured in .devtools/config.yaml",
       );
     }
 

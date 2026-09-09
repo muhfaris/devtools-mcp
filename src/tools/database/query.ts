@@ -22,6 +22,7 @@ export const executeQueryTool: Tool = {
       optional: true,
       description: "Query parameters (for prepared statements)",
       default: [],
+      items: {},
     },
     limit: {
       type: "number",
@@ -34,7 +35,7 @@ export const executeQueryTool: Tool = {
     const config = (global as any).__devtools_config;
     if (!config?.database?.connections) {
       throw new Error(
-        "No database connections configured in devtools.config.yaml",
+        "No database connections configured in .devtools/config.yaml",
       );
     }
 
@@ -67,7 +68,9 @@ export const executeQueryTool: Tool = {
       ];
       // Try to detect env from DSN or connection name
       if (
-        blockedEnvs.some((env) => connectionName.toLowerCase().includes(env))
+        blockedEnvs.some((env: any) =>
+          connectionName.toLowerCase().includes(env),
+        )
       ) {
         throw new Error(
           `Write queries are blocked on "${connectionName}" environment.`,

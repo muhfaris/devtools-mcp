@@ -2,7 +2,7 @@ import { Tool } from "../../core/types.js";
 import { MissingConfigError } from "../../core/errors.js";
 import {
   getGitLabClient,
-  getProjectId,
+  resolveProjectId,
   getGitLabConfig,
 } from "../../providers/gitlab.js";
 
@@ -10,6 +10,11 @@ export const gitlabListMrsTool: Tool = {
   name: "gitlab_list_mrs",
   description: "List merge requests from GitLab project with filters",
   params: {
+    project_id: {
+      type: "number",
+      optional: true,
+      description: "GitLab project ID. Overrides config default.",
+    },
     state: {
       type: "string",
       optional: true,
@@ -69,9 +74,10 @@ export const gitlabListMrsTool: Tool = {
         { token: "" },
       );
     }
+    // Priority: params.project_id > config.gitlab.projectId > error
+    const projectId = resolveProjectId(params, config);
 
     const client = getGitLabClient();
-    const projectId = getProjectId();
 
     const state = params.state || "opened";
     const limit = Math.min(Number(params.limit) || 20, 100);

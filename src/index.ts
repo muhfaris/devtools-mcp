@@ -1,23 +1,46 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { loadConfig } from "./core/config.js";
+import { watch } from "fs";
+import { loadConfig, reloadConfig, getConfigPath } from "./core/config.js";
 import { createRegistry, registerAllTools } from "./tools/index.js";
 import { startMcpServer } from "./mcp/server.js";
-import { initGitLab } from "./providers/gitlab.js";
+import { initGitLab, clearGitLab } from "./providers/gitlab.js";
 
-const main = async () => {
-  const config = await loadConfig();
+const applyConfig = (config: any) => {
   (global as any).__devtools_config = config;
-
-  // Initialize GitLab if configured
   if (config.gitlab) {
     try {
       initGitLab(config);
-      console.log("🔗 GitLab connected");
     } catch (error: any) {
-      console.warn("⚠️ GitLab initialization failed:", error.message);
+      console.warn("⚠️ GitLab re-init failed:", error.message);
     }
+  } else {
+    clearGitLab();
   }
+};
+
+const startWatcher = () => {
+  const path = getConfigPath();
+  if (!path) return;
+  let timer: NodeJS.Timeout | null = null;
+  watch(path, () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const next = await reloadConfig();
+        applyConfig(next);
+        console.warn("🔄 .devtools/config.yaml reloaded");
+      } catch (error: any) {
+        console.warn("⚠️ Config reload failed:", error.message);
+      }
+    }, 200);
+  });
+};
+
+const main = async () => {
+  const config = await loadConfig();
+  applyConfig(config);
+  startWatcher();
 
   const registry = createRegistry();
   await registerAllTools(registry, config);

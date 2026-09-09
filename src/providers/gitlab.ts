@@ -6,7 +6,7 @@ let projectId: string | number | null = null;
 
 export const initGitLab = (config: Config) => {
   if (!config.gitlab) {
-    throw new Error("GitLab configuration missing in devtools.config.yaml");
+    throw new Error("GitLab configuration missing in .devtools/config.yaml");
   }
 
   const { url, token, projectId: pid } = config.gitlab;
@@ -26,6 +26,11 @@ export const initGitLab = (config: Config) => {
   return { client: gitlabClient, projectId };
 };
 
+export const clearGitLab = () => {
+  gitlabClient = null;
+  projectId = null;
+};
+
 export const getGitLabClient = () => {
   if (!gitlabClient) {
     throw new Error("GitLab client not initialized. Call initGitLab() first.");
@@ -40,9 +45,23 @@ export const getProjectId = () => {
   return projectId;
 };
 
+export const resolveProjectId = (
+  params: Record<string, any>,
+  config: Config,
+) => {
+  // Priority: params.project_id > config.gitlab.projectId > error
+  const id = params.project_id ?? config.gitlab?.projectId;
+  if (!id) {
+    throw new Error(
+      "Project ID required. Set 'projectId' in config or pass 'project_id' parameter.",
+    );
+  }
+  return id;
+};
+
 export const getGitLabConfig = (config: Config) => {
   if (!config.gitlab) {
-    throw new Error("GitLab configuration missing in devtools.config.yaml");
+    throw new Error("GitLab configuration missing in .devtools/config.yaml");
   }
   return config.gitlab;
 };
