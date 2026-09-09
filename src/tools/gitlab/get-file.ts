@@ -6,7 +6,7 @@ import { formatGitLabError } from "../../providers/gitlab-error.js";
 export const gitlabGetFileTool: Tool = {
   name: "gitlab_get_file",
   description:
-    "Get full raw file content or metadata from a remote GitLab repository without local cloning. Useful for inspecting entire files referenced in MR diffs.",
+    "Get raw file content or line ranges from a remote GitLab repository without local cloning. Supports branch/commit refs and line slicing.",
   params: {
     mr_url: {
       type: "string",
@@ -31,6 +31,16 @@ export const gitlabGetFileTool: Tool = {
       description:
         "Branch name, tag, or commit SHA. Default: 'main' or project default branch.",
       default: "main",
+    },
+    start_line: {
+      type: "number",
+      optional: true,
+      description: "1-based starting line number to read",
+    },
+    end_line: {
+      type: "number",
+      optional: true,
+      description: "1-based ending line number to read",
     },
   },
   execute: async (params) => {
@@ -61,7 +71,6 @@ export const gitlabGetFileTool: Tool = {
     const ref = (params.ref || "main").trim();
 
     try {
-      // @gitbeaker/rest RepositoryFiles.show returns base64 content
       const file = await client.RepositoryFiles.show(projectId, filePath, ref);
 
       let content = "";
@@ -73,17 +82,37 @@ export const gitlabGetFileTool: Tool = {
         }
       }
 
+      const allLines = content.split("\n");
+      const totalLines = allLines.length;
+
+      let slicedContent = content;
+      let startLine = 1;
+      let endLine = totalLines;
+      let isSliced = false;
+
+      if (params.start_line !== undefined || params.end_line !== undefined) {
+        isSliced = true;
+        startLine = Math.max(1, Number(params.start_line) || 1);
+        endLine = Math.min(totalLines, Number(params.end_line) || totalLines);
+
+        if (startLine <= endLine) {
+          slicedContent = allLines.slice(startLine - 1, endLine).join("\n");
+        } else {
+          slicedContent = "";
+        }
+      }
+
       const result = {
         fileName: file.file_name,
         filePath: file.file_path,
         size: file.size,
-        encoding: file.encoding,
-        contentSha256: file.content_sha256,
         ref: file.ref,
-        blobId: file.blob_id,
         commitId: file.commit_id,
-        lastCommitId: file.last_commit_id,
-        content,
+        totalLines,
+        isSliced,
+        startLine: isSliced ? startLine : 1,
+        endLine: isSliced ? endLine : totalLines,
+        content: slicedContent,
       };
 
       return {
