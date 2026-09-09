@@ -1,8 +1,10 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
 import {
   getGitLabClient,
   getGitLabWebUrl,
+  resolveMrId,
   resolveProjectId,
 } from "../../providers/gitlab.js";
 
@@ -10,13 +12,20 @@ export const gitlabCreateNoteTool: Tool = {
   name: "gitlab_create_note",
   description: "Add a comment/note to a merge request",
   params: {
-    project_id: {
-      type: "number",
+    mr_url: {
+      type: "string",
       optional: true,
-      description: "GitLab project ID. Overrides config default.",
+      description: "Full GitLab merge request URL",
+    },
+    project_id: {
+      type: "string",
+      optional: true,
+      description:
+        "GitLab project ID or path with namespace. Overrides config default.",
     },
     mr_id: {
       type: "number",
+      optional: true,
       description: "Merge request IID (internal ID)",
     },
     body: {
@@ -60,18 +69,8 @@ export const gitlabCreateNoteTool: Tool = {
 
     const client = getGitLabClient();
     const projectId = resolveProjectId(params, config);
-    const mrId = Number(params.mr_id);
+    const mrId = resolveMrId(params);
     const body = params.body || "";
-
-    if (!mrId || isNaN(mrId)) {
-      throw new ToolError(
-        "GITLAB_MR_ID_REQUIRED",
-        "A valid GitLab merge request ID is required.",
-        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
-        true,
-        { parameter: "mr_id" },
-      );
-    }
 
     if (!body || body.trim() === "") {
       throw new ToolError(
@@ -136,14 +135,7 @@ export const gitlabCreateNoteTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      if (error instanceof ToolError) throw error;
-      throw new ToolError(
-        "GITLAB_REQUEST_FAILED",
-        "GitLab could not create the merge request note.",
-        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
-        false,
-        { cause: error },
-      );
+      throw formatGitLabError("create the merge request note", error);
     }
   },
 };

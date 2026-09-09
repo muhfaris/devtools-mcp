@@ -1,18 +1,30 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
+import {
+  getGitLabClient,
+  resolveMrId,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
 
 export const gitlabGetDiscussionsTool: Tool = {
   name: "gitlab_get_mr_discussions",
   description: "Get all discussion threads and comments on a merge request",
   params: {
-    project_id: {
-      type: "number",
+    mr_url: {
+      type: "string",
       optional: true,
-      description: "GitLab project ID. Overrides config default.",
+      description: "Full GitLab merge request URL",
+    },
+    project_id: {
+      type: "string",
+      optional: true,
+      description:
+        "GitLab project ID or path with namespace. Overrides config default.",
     },
     mr_id: {
       type: "number",
+      optional: true,
       description: "Merge request IID (internal ID)",
     },
     only_unresolved: {
@@ -36,21 +48,14 @@ export const gitlabGetDiscussionsTool: Tool = {
 
     const client = getGitLabClient();
     const projectId = resolveProjectId(params, config);
-    const mrId = Number(params.mr_id);
-
-    if (!mrId || isNaN(mrId)) {
-      throw new ToolError(
-        "GITLAB_MR_ID_REQUIRED",
-        "A valid GitLab merge request ID is required.",
-        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
-        true,
-        { parameter: "mr_id" },
-      );
-    }
+    const mrId = resolveMrId(params);
 
     try {
       // Get discussions
-      const discussions = await client.Discussions.all(projectId, mrId);
+      const discussions = await client.MergeRequestDiscussions.all(
+        projectId,
+        mrId,
+      );
 
       const filtered = params.only_unresolved
         ? discussions.filter((d: any) => d.resolvable && !d.resolved)
@@ -82,14 +87,7 @@ export const gitlabGetDiscussionsTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      if (error instanceof ToolError) throw error;
-      throw new ToolError(
-        "GITLAB_REQUEST_FAILED",
-        "GitLab could not get merge request discussions.",
-        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
-        false,
-        { cause: error },
-      );
+      throw formatGitLabError("get merge request discussions", error);
     }
   },
 };

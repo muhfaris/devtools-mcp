@@ -19,10 +19,10 @@ export const gitlabSetConfigTool: Tool = {
       description: 'GitLab instance URL (default: "https://gitlab.com")',
     },
     projectId: {
-      type: "number",
+      type: "string",
       optional: true,
       description:
-        "Persistent GitLab numeric project ID; operation calls use project_id",
+        "Persistent GitLab project ID or path with namespace (e.g. 'group/project' or 774); operation calls use project_id",
     },
   },
   execute: async (params) => {

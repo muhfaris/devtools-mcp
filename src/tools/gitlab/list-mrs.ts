@@ -1,5 +1,6 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
 import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 
 export const gitlabListMrsTool: Tool = {
@@ -7,9 +8,10 @@ export const gitlabListMrsTool: Tool = {
   description: "List merge requests from GitLab project with filters",
   params: {
     project_id: {
-      type: "number",
+      type: "string",
       optional: true,
-      description: "GitLab project ID. Overrides config default.",
+      description:
+        "GitLab project ID or path with namespace (e.g. 'group/project' or 774). Overrides config default.",
     },
     state: {
       type: "string",
@@ -113,14 +115,7 @@ export const gitlabListMrsTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(summary, null, 2) }],
       };
     } catch (error: any) {
-      if (error instanceof ToolError) throw error;
-      throw new ToolError(
-        "GITLAB_REQUEST_FAILED",
-        "GitLab could not list merge requests.",
-        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
-        false,
-        { cause: error },
-      );
+      throw formatGitLabError("list merge requests", error);
     }
   },
 };

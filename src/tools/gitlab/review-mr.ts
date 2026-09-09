@@ -1,18 +1,30 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import {
+  getGitLabClient,
+  resolveMrId,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
 
 export const gitlabReviewMrTool: Tool = {
   name: "gitlab_review_mr",
   description: "Get full MR diff with review suggestions and analysis",
   params: {
-    project_id: {
-      type: "number",
+    mr_url: {
+      type: "string",
       optional: true,
-      description: "GitLab project ID. Overrides config default.",
+      description: "Full GitLab merge request URL",
+    },
+    project_id: {
+      type: "string",
+      optional: true,
+      description:
+        "GitLab project ID or path with namespace. Overrides config default.",
     },
     mr_id: {
       type: "number",
+      optional: true,
       description: "Merge request IID (internal ID)",
     },
     max_files: {
@@ -42,25 +54,15 @@ export const gitlabReviewMrTool: Tool = {
 
     const client = getGitLabClient();
     const projectId = resolveProjectId(params, config);
-    const mrId = Number(params.mr_id);
+    const mrId = resolveMrId(params);
     const maxFiles = Math.min(Number(params.max_files) || 10, 50);
-
-    if (!mrId || isNaN(mrId)) {
-      throw new ToolError(
-        "GITLAB_MR_ID_REQUIRED",
-        "A valid GitLab merge request ID is required.",
-        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
-        true,
-        { parameter: "mr_id" },
-      );
-    }
 
     try {
       // Get MR details
       const mr = await client.MergeRequests.show(projectId, mrId);
 
       // Get changes
-      const changes = await client.MergeRequests.changes(projectId, mrId);
+      const changes = await client.MergeRequests.showChanges(projectId, mrId);
       const allFiles = changes.changes;
       const files = allFiles.slice(0, maxFiles);
 
@@ -117,14 +119,7 @@ export const gitlabReviewMrTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      if (error instanceof ToolError) throw error;
-      throw new ToolError(
-        "GITLAB_REQUEST_FAILED",
-        "GitLab could not review the merge request.",
-        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
-        false,
-        { cause: error },
-      );
+      throw formatGitLabError("review the merge request", error);
     }
   },
 };

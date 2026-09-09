@@ -1,19 +1,32 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
+import {
+  getGitLabClient,
+  resolveMrId,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
 
 export const gitlabGetMrTool: Tool = {
   name: "gitlab_get_mr",
   description:
-    "Get detailed merge request information including diff, changes, and discussions",
+    "Get detailed merge request information including diff, changes, and discussions. Accepts MR URL or project_id + mr_id.",
   params: {
-    project_id: {
-      type: "number",
+    mr_url: {
+      type: "string",
       optional: true,
-      description: "GitLab project ID. Overrides config default.",
+      description:
+        "Full GitLab merge request URL (e.g. https://gitlab.com/group/project/-/merge_requests/123)",
+    },
+    project_id: {
+      type: "string",
+      optional: true,
+      description:
+        "GitLab project ID or path with namespace (e.g., 'group/project' or 774). Overrides config default.",
     },
     mr_id: {
       type: "number",
+      optional: true,
       description: "Merge request IID (internal ID)",
     },
     include_diff: {
@@ -43,17 +56,7 @@ export const gitlabGetMrTool: Tool = {
 
     const client = getGitLabClient();
     const projectId = resolveProjectId(params, config);
-    const mrId = Number(params.mr_id);
-
-    if (!mrId || isNaN(mrId)) {
-      throw new ToolError(
-        "GITLAB_MR_ID_REQUIRED",
-        "A valid GitLab merge request ID is required.",
-        "Ask the user for the numeric merge request IID, then retry this tool with mr_id.",
-        true,
-        { parameter: "mr_id" },
-      );
-    }
+    const mrId = resolveMrId(params);
 
     try {
       // Get MR details
@@ -62,7 +65,7 @@ export const gitlabGetMrTool: Tool = {
       // Get changes/diff
       let diff: any[] = [];
       if (params.include_diff !== false) {
-        const changes = await client.MergeRequests.changes(projectId, mrId);
+        const changes = await client.MergeRequests.showChanges(projectId, mrId);
         diff = changes.changes.map((c: any) => ({
           file: c.new_path || c.old_path,
           added: c.new_file || false,
@@ -121,14 +124,7 @@ export const gitlabGetMrTool: Tool = {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error: any) {
-      if (error instanceof ToolError) throw error;
-      throw new ToolError(
-        "GITLAB_REQUEST_FAILED",
-        "GitLab could not get the merge request.",
-        "Report the GitLab failure to the user; do not switch to local Git or retry automatically.",
-        false,
-        { cause: error },
-      );
+      throw formatGitLabError("get the merge request", error);
     }
   },
 };
