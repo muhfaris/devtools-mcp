@@ -5,16 +5,18 @@ import type { ToolParamSchema } from "../core/types.js";
 import { stringifyToolError } from "../core/errors.js";
 import { z } from "zod";
 
-const jsonValueSchema: z.ZodType = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
-  ]),
-);
+const jsonPrimitiveSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+const jsonValueSchema = z.union([
+  jsonPrimitiveSchema,
+  z.array(jsonPrimitiveSchema),
+  z.record(jsonPrimitiveSchema),
+]);
 
 export const createToolParamSchema = (param: ToolParamSchema): z.ZodTypeAny => {
   let schema: z.ZodTypeAny;
