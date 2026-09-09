@@ -29,4 +29,14 @@ describe("MCP tool input schema", () => {
 
     expect(schema.properties?.options?.type).toBe("object");
   });
+
+  it("emits no nested $ref for recursive array/object params", () => {
+    const schema = zodToJsonSchema(
+      z.object(createToolInputSchema(executeQueryTool.params)),
+    ) as { properties?: Record<string, unknown>; $defs?: unknown };
+
+    const json = JSON.stringify(schema);
+    // OpenAI rejects $ref pointing to nested paths; ensure none are emitted.
+    expect(json).not.toMatch(/#\/properties\//);
+  });
 });

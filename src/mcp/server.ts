@@ -12,10 +12,19 @@ const jsonPrimitiveSchema = z.union([
   z.null(),
 ]);
 
-const jsonValueSchema = z.union([
+// Arbitrary JSON value for array/object items. Avoid a recursive union
+// (z.lazy): zod-to-json-schema emits nested $ref pointers that OpenAI's
+// function-schema validator rejects. This flat union of primitives + object
+// emits a valid `items` with no $ref at all, and the object's
+// additionalProperties carries a `type` key (OpenAI requires it).
+// Note: the record value must be a fresh inline union, not the shared
+// jsonPrimitiveSchema constant, otherwise zod-to-json-schema dedupes it
+// into a nested $ref.
+const jsonValueSchema: z.ZodTypeAny = z.union([
   jsonPrimitiveSchema,
-  z.array(jsonPrimitiveSchema),
-  z.record(jsonPrimitiveSchema),
+  z.record(
+    z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  ),
 ]);
 
 export const createToolParamSchema = (param: ToolParamSchema): z.ZodTypeAny => {
