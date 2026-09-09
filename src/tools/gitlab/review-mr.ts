@@ -9,7 +9,8 @@ import { formatGitLabError } from "../../providers/gitlab-error.js";
 
 export const gitlabReviewMrTool: Tool = {
   name: "gitlab_review_mr",
-  description: "Get full MR diff with review suggestions and analysis",
+  description:
+    "Get full GitLab MR diffs, file analysis, and review suggestions for AI code review without needing a local git clone.",
   params: {
     mr_url: {
       type: "string",
@@ -87,9 +88,7 @@ export const gitlabReviewMrTool: Tool = {
           deletions,
           language,
           complexity,
-          diff:
-            file.diff?.substring(0, 800) +
-            (file.diff?.length > 800 ? "\n... (truncated)" : ""),
+          diff: file.diff || "",
           suggestions,
         };
       });

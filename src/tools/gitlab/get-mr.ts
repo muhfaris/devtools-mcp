@@ -1,16 +1,16 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
-import { formatGitLabError } from "../../providers/gitlab-error.js";
 import {
   getGitLabClient,
   resolveMrId,
   resolveProjectId,
 } from "../../providers/gitlab.js";
+import { formatGitLabError } from "../../providers/gitlab-error.js";
 
 export const gitlabGetMrTool: Tool = {
   name: "gitlab_get_mr",
   description:
-    "Get detailed merge request information including diff, changes, and discussions. Accepts MR URL or project_id + mr_id.",
+    "Get detailed merge request metadata, discussions, and file changes/diffs from GitLab. For deep code reviews with file-by-file suggestions, use gitlab_review_mr.",
   params: {
     mr_url: {
       type: "string",
@@ -34,6 +34,13 @@ export const gitlabGetMrTool: Tool = {
       optional: true,
       description: "Include diff/changes (default: true)",
       default: true,
+    },
+    full_diff: {
+      type: "boolean",
+      optional: true,
+      description:
+        "Include full un-truncated diffs for code reviews (default: false)",
+      default: false,
     },
     include_discussions: {
       type: "boolean",
@@ -66,6 +73,7 @@ export const gitlabGetMrTool: Tool = {
       let diff: any[] = [];
       if (params.include_diff !== false) {
         const changes = await client.MergeRequests.showChanges(projectId, mrId);
+        const full = params.full_diff === true;
         diff = changes.changes.map((c: any) => ({
           file: c.new_path || c.old_path,
           added: c.new_file || false,
@@ -73,7 +81,12 @@ export const gitlabGetMrTool: Tool = {
           renamed: c.renamed_file || false,
           additions: c.additions,
           deletions: c.deletions,
-          diff: c.diff?.substring(0, 500) + (c.diff?.length > 500 ? "..." : ""),
+          diff: full
+            ? c.diff || ""
+            : c.diff?.substring(0, 800) +
+              (c.diff && c.diff.length > 800
+                ? "\n... (truncated, pass full_diff: true for complete diff)"
+                : ""),
         }));
       }
 
