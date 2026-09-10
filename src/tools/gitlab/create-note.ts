@@ -204,7 +204,8 @@ export const gitlabCreateNoteTool: Tool = {
     mr_url: {
       type: "string",
       optional: true,
-      description: "Full GitLab merge request URL",
+      description:
+        "Full GitLab merge request URL. If mr_id is also provided, both must identify the same merge request.",
     },
     project_id: {
       type: "string",
@@ -215,7 +216,8 @@ export const gitlabCreateNoteTool: Tool = {
     mr_id: {
       type: "number",
       optional: true,
-      description: "Merge request IID (internal ID)",
+      description:
+        "Positive merge request IID. Must match the IID in mr_url when both are provided.",
     },
     body: {
       type: "string",
@@ -230,29 +232,32 @@ export const gitlabCreateNoteTool: Tool = {
     line: {
       type: "number",
       optional: true,
-      description: "Line number for code comment (requires position)",
+      description:
+        "Positive line number for a single-line comment. Requires path; cannot be combined with start_line or end_line.",
     },
     start_line: {
       type: "number",
       optional: true,
       description:
-        "Start line for a multi-line code comment (requires end_line and path)",
+        "Positive first line of an inclusive range. Requires path and end_line; cannot be combined with line.",
     },
     end_line: {
       type: "number",
       optional: true,
       description:
-        "End line for a multi-line code comment (requires start_line and path)",
+        "Positive last line of an inclusive range. Requires path and start_line; must be greater than or equal to start_line.",
     },
     path: {
       type: "string",
       optional: true,
-      description: "File path for code comment (requires line)",
+      description:
+        "Changed file path in the merge request diff. Requires line, or both start_line and end_line.",
     },
     side: {
       type: "string",
       optional: true,
-      description: "Side of the diff: left, right (default: right)",
+      description:
+        "Diff side: right for new-file line numbers, left for old-file line numbers. Defaults to right.",
       default: "right",
     },
   },
