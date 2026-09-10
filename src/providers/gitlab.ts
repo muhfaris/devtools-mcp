@@ -157,14 +157,11 @@ export const resolveProjectId = (
 };
 
 export const resolveMrId = (params: Record<string, unknown>): number => {
-  if (
+  const hasExplicitMrId =
     params.mr_id !== undefined &&
     params.mr_id !== null &&
-    params.mr_id !== ""
-  ) {
-    const num = Number(params.mr_id);
-    if (!isNaN(num) && num > 0) return num;
-  }
+    params.mr_id !== "";
+  const explicitMrId = hasExplicitMrId ? Number(params.mr_id) : undefined;
 
   const rawUrl =
     typeof params.mr_url === "string"
@@ -172,10 +169,36 @@ export const resolveMrId = (params: Record<string, unknown>): number => {
       : typeof params.url === "string"
         ? params.url
         : undefined;
-  if (rawUrl) {
-    const parsed = parseGitLabUrl(rawUrl);
-    if (parsed.mrId) return parsed.mrId;
+  const urlMrId = rawUrl ? parseGitLabUrl(rawUrl).mrId : undefined;
+
+  if (
+    explicitMrId !== undefined &&
+    Number.isInteger(explicitMrId) &&
+    explicitMrId > 0
+  ) {
+    if (urlMrId !== undefined && explicitMrId !== urlMrId) {
+      throw new ToolError(
+        "GITLAB_MR_ID_MISMATCH",
+        `mr_id ${explicitMrId} does not match merge request ${urlMrId} in mr_url.`,
+        `Retry with mr_id: ${urlMrId}, or omit mr_id and rely on mr_url.`,
+        false,
+        { parameter: "mr_id" },
+      );
+    }
+    return explicitMrId;
   }
+
+  if (hasExplicitMrId) {
+    throw new ToolError(
+      "GITLAB_MR_ID_INVALID",
+      "mr_id must be a positive integer.",
+      "Provide a positive integer merge request IID, or omit mr_id and provide a full mr_url.",
+      false,
+      { parameter: "mr_id" },
+    );
+  }
+
+  if (urlMrId) return urlMrId;
 
   throw new ToolError(
     "GITLAB_MR_ID_REQUIRED",

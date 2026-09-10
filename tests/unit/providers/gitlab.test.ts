@@ -95,6 +95,41 @@ describe("providers/gitlab", () => {
       expect(resolveMrId({ mr_id: "789" })).toBe(789);
     });
 
+    it("rejects an mr_id that conflicts with mr_url", () => {
+      expect(() =>
+        resolveMrId({
+          mr_id: 123940,
+          mr_url:
+            "https://gitlab.example.com/group/project/-/merge_requests/1239",
+        }),
+      ).toThrowError(ToolError);
+
+      try {
+        resolveMrId({
+          mr_id: 123940,
+          mr_url:
+            "https://gitlab.example.com/group/project/-/merge_requests/1239",
+        });
+      } catch (err: any) {
+        expect(err).toMatchObject({
+          code: "GITLAB_MR_ID_MISMATCH",
+          parameter: "mr_id",
+          retryable: false,
+        });
+        expect(err.message).toContain("123940");
+        expect(err.action).toContain("mr_id: 1239");
+      }
+    });
+
+    it.each([0, -1, 1.5, "invalid"])(
+      "rejects invalid explicit mr_id %s",
+      (mrId) => {
+        expect(() => resolveMrId({ mr_id: mrId })).toThrowError(
+          expect.objectContaining({ code: "GITLAB_MR_ID_INVALID" }),
+        );
+      },
+    );
+
     it("throws GITLAB_MR_ID_REQUIRED if neither is provided", () => {
       expect(() => resolveMrId({})).toThrowError(ToolError);
       try {
