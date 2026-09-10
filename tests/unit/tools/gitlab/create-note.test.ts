@@ -129,7 +129,7 @@ describe("gitlab_create_note", () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
-  it("posts a multi-line code comment with line_range", async () => {
+  it("posts a multi-line code comment when an omitted line is serialized as zero", async () => {
     const mockCreate = vi.fn().mockResolvedValue({
       id: 777,
       body: "Multi-line review",
@@ -174,6 +174,7 @@ describe("gitlab_create_note", () => {
       mr_id: 12,
       body: "Multi-line review",
       path: "src/app.ts",
+      line: 0,
       start_line: 10,
       end_line: 15,
       side: "right",

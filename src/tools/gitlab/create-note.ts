@@ -78,7 +78,7 @@ const validateDiffPosition = (
 
   const lines = collectCommentableLines(changedFile!.diff);
   const commentable = side === "left" ? lines.oldLines : lines.newLines;
-  const requested = params.line !== undefined
+  const requested = Number(params.line) > 0
     ? [Number(params.line)]
     : Array.from(
         { length: Number(params.end_line) - Number(params.start_line) + 1 },
@@ -87,7 +87,7 @@ const validateDiffPosition = (
   const invalidLine = requested.find((line) => !commentable.has(line));
 
   if (invalidLine !== undefined) {
-    const parameter = params.line !== undefined
+    const parameter = Number(params.line) > 0
       ? "line"
       : invalidLine === Number(params.start_line)
         ? "start_line"
@@ -120,9 +120,11 @@ const createLineCode = (
 const validateInlinePosition = (
   params: Record<string, any>,
 ): InlinePosition => {
-  const hasLine = params.line !== undefined && params.line !== null;
   const hasStart = params.start_line !== undefined && params.start_line !== null;
   const hasEnd = params.end_line !== undefined && params.end_line !== null;
+  const hasCompleteRange = hasStart && hasEnd;
+  const hasLine = params.line !== undefined && params.line !== null &&
+    !(Number(params.line) === 0 && hasCompleteRange);
   const hasPath = params.path !== undefined && params.path !== null;
   const hasRange = hasStart || hasEnd;
   const hasPosition = hasLine || hasRange || hasPath;
@@ -319,8 +321,12 @@ export const gitlabCreateNoteTool: Tool = {
         const baseSha = mr.diff_refs?.base_sha || sha;
         const headSha = mr.diff_refs?.head_sha || sha;
         const startSha = mr.diff_refs?.start_sha || sha;
-        const newLine = params.side === "right" ? Number(params.line) : undefined;
-        const oldLine = params.side === "left" ? Number(params.line) : undefined;
+        const newLine = isSingleLine && params.side === "right"
+          ? Number(params.line)
+          : undefined;
+        const oldLine = isSingleLine && params.side === "left"
+          ? Number(params.line)
+          : undefined;
 
         const position: any = {
           base_sha: baseSha,
