@@ -29,9 +29,14 @@ export const databaseSetConnectionTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config || {};
-    if (!config.database)
-      config.database = { default_engine: "postgresql", connections: {} };
-    if (!config.database.connections) config.database.connections = {};
+    if (!config.providers) config.providers = {};
+    if (!config.providers.database)
+      config.providers.database = {
+        default_engine: "postgresql",
+        connections: {},
+      };
+    if (!config.providers.database.connections)
+      config.providers.database.connections = {};
     (global as any).__devtools_config = config;
 
     const name = params.name;
@@ -39,9 +44,9 @@ export const databaseSetConnectionTool: Tool = {
     const engine = params.engine || "postgresql";
     const readonly = params.readonly || false;
 
-    config.database.connections[name] = { dsn, readonly };
-    if (!config.database.default_engine) {
-      config.database.default_engine = engine;
+    config.providers.database.connections[name] = { dsn, readonly };
+    if (!config.providers.database.default_engine) {
+      config.providers.database.default_engine = engine;
     }
 
     // (Optional) Test connection

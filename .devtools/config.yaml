@@ -2,20 +2,37 @@
 id_generator:
   default: ulid
 
-database:
-  default_engine: postgresql
-  connections:
-    dev:
-      dsn: ${DEV_DATABASE_URL}
-      readonly: false
+providers:
+  database:
+    enabled: true
+    default_engine: postgresql
+    connections:
+      dev:
+        dsn: ${DEV_DATABASE_URL}
+        readonly: false
+    security:
+      allow_write: false
+      blocked_env: [production, prod]
 
-security:
-  execute_query:
-    allow_write: false
-    blocked_env: [production, prod]
+  gitlab:
+    enabled: true
+    url: https://gitlab.com
+    token: ${GITLAB_TOKEN}
+    projectId: 12345
+    security:
+      blocked_env: [production, prod] # protects create_note, etc.
 
-# GitLab Integration
-gitlab:
-  url: https://gitlab.com # or your self-hosted instance
-  token: ${GITLAB_TOKEN} # Personal Access Token with api scope
-  projectId: 12345 # Your project ID
+  redis:
+    enabled: true
+    default_connection: dev
+    connections:
+      dev:
+        url: ${REDIS_URL}
+        readonly: true
+        timeout: 5000
+      cache:
+        url: redis://localhost:6379/1
+        readonly: true
+    security:
+      allow_write: false
+      blocked_env: [production, prod]

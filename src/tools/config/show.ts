@@ -31,36 +31,54 @@ const showConnection = (name: string, connection: ConnectionConfig) => {
   };
 };
 
-export const getSafeConfigView = (config: Config = {}) => ({
-  config_path: getConfigPath(),
-  runtime: getConfigRuntimeState(),
-  database: config.database
-    ? {
-        default_engine: config.database.default_engine,
-        connections: Object.fromEntries(
-          Object.entries(config.database.connections || {}).map(
-            ([name, connection]) => [name, showConnection(name, connection)],
+export const getSafeConfigView = (config: Config = {}) => {
+  const db = config.providers?.database ?? config.database;
+  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  const redis = config.providers?.redis ?? config.redis;
+  return {
+    config_path: getConfigPath(),
+    runtime: getConfigRuntimeState(),
+    database: db
+      ? {
+          enabled: config.providers?.database?.enabled ?? true,
+          default_engine: db.default_engine,
+          connections: Object.fromEntries(
+            Object.entries(db.connections || {}).map(([name, connection]) => [
+              name,
+              showConnection(name, connection),
+            ]),
           ),
-        ),
-      }
-    : null,
-  gitlab: config.gitlab
-    ? {
-        url: config.gitlab.url || "https://gitlab.com",
-        projectId: config.gitlab.projectId ?? null,
-        token_configured: Boolean(config.gitlab.token),
-      }
-    : null,
-  security: {
-    execute_query: {
-      allow_write: config.security?.execute_query?.allow_write ?? false,
-      blocked_env: config.security?.execute_query?.blocked_env ?? [
-        "production",
-        "prod",
-      ],
+        }
+      : null,
+    gitlab: gitlab
+      ? {
+          enabled: config.providers?.gitlab?.enabled ?? true,
+          url: gitlab.url || "https://gitlab.com",
+          projectId: gitlab.projectId ?? null,
+          token_configured: Boolean(gitlab.token),
+        }
+      : null,
+    redis: redis
+      ? {
+          enabled: config.providers?.redis?.enabled ?? true,
+          default_connection: redis.default_connection ?? null,
+          connections: Object.keys(redis.connections || {}),
+        }
+      : null,
+    security: {
+      execute_query: {
+        allow_write:
+          config.providers?.database?.security?.allow_write ??
+          config.security?.execute_query?.allow_write ??
+          false,
+        blocked_env:
+          config.providers?.database?.security?.blocked_env ??
+          config.security?.execute_query?.blocked_env ??
+          ["production", "prod"],
+      },
     },
-  },
-});
+  };
+};
 
 export const showConfigTool: Tool = {
   name: "show_config",

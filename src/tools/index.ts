@@ -27,6 +27,21 @@ import { gitlabSetConfigTool } from "./gitlab/set-config.js";
 import { databaseSetConnectionTool } from "./database/set-connection.js";
 import { showConfigTool } from "./config/show.js";
 import { reloadConfigTool } from "./config/reload.js";
+import {
+  jsonMinifyTool,
+  jsonFormatTool,
+  jsonValidateTool,
+} from "./json/index.js";
+import { redisInfoTool } from "./redis/info.js";
+import { redisListKeysTool } from "./redis/list-keys.js";
+import { redisGetKeyTool } from "./redis/get-key.js";
+import { redisKeyInfoTool } from "./redis/key-info.js";
+import { redisSlowlogTool } from "./redis/slowlog.js";
+import { redisSetKeyTool } from "./redis/set-key.js";
+import { redisDeleteKeyTool } from "./redis/delete-key.js";
+import { redisExpireKeyTool } from "./redis/expire-key.js";
+
+// In registerAllTools:
 export { createRegistry } from "../core/registry.js";
 
 export const registerAllTools = async (
@@ -61,4 +76,15 @@ export const registerAllTools = async (
   registry.register(databaseSetConnectionTool);
   registry.register(showConfigTool);
   registry.register(reloadConfigTool);
+  registry.register(jsonMinifyTool);
+  registry.register(jsonFormatTool);
+  registry.register(jsonValidateTool);
+  registry.register(redisInfoTool);
+  registry.register(redisListKeysTool);
+  registry.register(redisGetKeyTool);
+  registry.register(redisKeyInfoTool);
+  registry.register(redisSlowlogTool);
+  registry.register(redisSetKeyTool);
+  registry.register(redisDeleteKeyTool);
+  registry.register(redisExpireKeyTool);
 };

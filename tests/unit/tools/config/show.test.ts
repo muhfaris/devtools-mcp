@@ -11,23 +11,27 @@ afterEach(() => {
 describe("show_config", () => {
   it("exposes development DSNs and sanitizes other connection credentials", async () => {
     (global as any).__devtools_config = {
-      database: {
-        default_engine: "mariadb",
-        connections: {
-          dev: {
-            dsn: "mariadb://dev:secret@localhost:3306/app?ssl=true",
-            readonly: false,
-          },
-          staging: {
-            dsn: "mariadb://stage:secret@db.example.com/app?password=hidden&access_token=also-hidden&ssl=true",
-            readonly: true,
+      providers: {
+        database: {
+          enabled: true,
+          default_engine: "mariadb",
+          connections: {
+            dev: {
+              dsn: "mariadb://dev:secret@localhost:3306/app?ssl=true",
+              readonly: false,
+            },
+            staging: {
+              dsn: "mariadb://stage:secret@db.example.com/app?password=hidden&access_token=also-hidden&ssl=true",
+              readonly: true,
+            },
           },
         },
-      },
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "glpat-secret",
-        projectId: 42,
+        gitlab: {
+          enabled: true,
+          url: "https://gitlab.example.com",
+          token: "glpat-secret",
+          projectId: 42,
+        },
       },
       security: {
         execute_query: { allow_write: false, blocked_env: ["production"] },
@@ -46,6 +50,7 @@ describe("show_config", () => {
     });
     expect(JSON.stringify(result)).not.toContain("glpat-secret");
     expect(result.gitlab).toEqual({
+      enabled: true,
       url: "https://gitlab.example.com",
       projectId: 42,
       token_configured: true,

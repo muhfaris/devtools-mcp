@@ -4,7 +4,8 @@ export const requireDatabaseConnection = (
   config: any,
   requestedConnection?: unknown,
 ) => {
-  const connections = config?.database?.connections;
+  const connections =
+    config?.providers?.database?.connections ?? config?.database?.connections;
   if (!connections || Object.keys(connections).length === 0) {
     throw new ToolError(
       "DATABASE_CONNECTION_REQUIRED",

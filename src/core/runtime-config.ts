@@ -1,7 +1,6 @@
 import { existsSync } from "fs";
 import type { Config } from "./types.js";
 import { getConfigPath, reloadConfig } from "./config.js";
-import { clearGitLab, initGitLab } from "../providers/gitlab.js";
 
 export type ConfigRuntimeState = {
   status: "not_loaded" | "loaded" | "reload_failed";
@@ -21,13 +20,7 @@ const state: ConfigRuntimeState = {
 
 const now = () => new Date().toISOString();
 
-const initializeProviders = (config: Config) => {
-  if (config.gitlab) initGitLab(config);
-  else clearGitLab();
-};
-
 export const applyRuntimeConfig = (config: Config, reloaded = false) => {
-  initializeProviders(config);
   (global as any).__devtools_config = config;
 
   const timestamp = now();

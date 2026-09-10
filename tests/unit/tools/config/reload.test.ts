@@ -2,19 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseToolJson } from "../../../helpers/tools-test-helper.js";
 import { ToolError } from "../../../../src/core/errors.js";
 
-vi.mock("../../../../src/core/runtime-config.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("../../../../src/core/runtime-config.js")
-    >();
-  return {
-    ...actual,
-    reloadRuntimeConfig: vi.fn(),
-  };
-});
+vi.mock("../../../../src/core/runtime-config.js", () => ({
+  reloadRuntimeConfig: vi.fn(),
+}));
 
 import { reloadRuntimeConfig } from "../../../../src/core/runtime-config.js";
 import { reloadConfigTool } from "../../../../src/tools/config/reload.js";
+
+const mockReload = reloadRuntimeConfig as unknown as ReturnType<typeof vi.fn>;
 
 const originalConfig = (global as any).__devtools_config;
 
@@ -25,7 +20,7 @@ afterEach(() => {
 
 describe("reload_config", () => {
   it("returns the newly loaded safe configuration in success envelope", async () => {
-    vi.mocked(reloadRuntimeConfig).mockResolvedValue({
+    mockReload.mockResolvedValue({
       database: {
         default_engine: "mysql",
         connections: {
@@ -46,9 +41,7 @@ describe("reload_config", () => {
   });
 
   it("propagates reload failures as ToolError", async () => {
-    vi.mocked(reloadRuntimeConfig).mockRejectedValue(
-      new Error("config missing"),
-    );
+    mockReload.mockRejectedValue(new Error("config missing"));
     await expect(reloadConfigTool.execute({})).rejects.toThrowError(ToolError);
     await expect(reloadConfigTool.execute({})).rejects.toMatchObject({
       code: "CONFIG_RELOAD_FAILED",

@@ -74,10 +74,39 @@ export interface GitLabConfig {
 
 export interface Config {
   id_generator?: { default?: string };
+  providers?: ProvidersConfig;
+  // Legacy top-level fields (deprecated, fallback when providers.* absent)
   database?: DatabaseConfig;
   security?: SecurityConfig;
   codegraph?: CodegraphConfig;
   gitlab?: GitLabConfig;
+  redis?: RedisConfig;
+}
+
+export interface ProvidersConfig {
+  database?: DatabaseProviderConfig;
+  gitlab?: GitLabProviderConfig;
+  redis?: RedisProviderConfig;
+}
+
+export interface ProviderSecurityConfig {
+  allow_write?: boolean;
+  blocked_env?: string[];
+}
+
+export interface DatabaseProviderConfig extends DatabaseConfig {
+  enabled?: boolean;
+  security?: ProviderSecurityConfig;
+}
+
+export interface GitLabProviderConfig extends GitLabConfig {
+  enabled?: boolean;
+  security?: ProviderSecurityConfig;
+}
+
+export interface RedisProviderConfig extends RedisConfig {
+  enabled?: boolean;
+  security?: ProviderSecurityConfig;
 }
 
 export interface DatabaseConfig {
@@ -102,4 +131,16 @@ export interface SecurityConfig {
 export interface CodegraphConfig {
   enabled: boolean;
   exclude: string[];
+}
+
+export interface RedisConnectionConfig {
+  url: string;
+  readonly?: boolean;
+  db?: number;
+  timeout?: number;
+}
+
+export interface RedisConfig {
+  connections: Record<string, RedisConnectionConfig>;
+  default_connection?: string;
 }

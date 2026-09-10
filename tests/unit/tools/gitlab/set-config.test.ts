@@ -26,7 +26,9 @@ describe("gitlab_set_config", () => {
       token_updated: false,
       initialized: true,
     });
-    expect((global as any).__devtools_config.gitlab.projectId).toBe(999);
+    expect((global as any).__devtools_config.providers.gitlab.projectId).toBe(
+      999,
+    );
   });
 
   it("never echoes token value in response envelope", async () => {

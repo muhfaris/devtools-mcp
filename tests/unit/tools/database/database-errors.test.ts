@@ -86,7 +86,7 @@ describe("database tools error recovery", () => {
       expect.unreachable("should have thrown");
     } catch (err: any) {
       expect(err.code).toBe("DATABASE_WRITE_DISABLED");
-      expect(err.configKey).toBe("security.execute_query.allow_write");
+      expect(err.configKey).toBe("providers.database.security.allow_write");
     }
   });
 

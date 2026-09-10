@@ -39,6 +39,16 @@ export const executeQueryTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
+    const db = config?.providers?.database ?? config?.database;
+    if (config?.providers?.database?.enabled === false) {
+      throw new ToolError(
+        "DATABASE_DISABLED",
+        "Database provider is disabled in configuration.",
+        "Enable providers.database.enabled in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.database.enabled" },
+      );
+    }
     const { connectionName, connection: connConfig } =
       requireDatabaseConnection(config, params.connection);
 
@@ -47,21 +57,22 @@ export const executeQueryTool: Tool = {
     const isWrite = !/^\s*SELECT/i.test(query);
 
     if (isWrite) {
-      const allowWrite = config.security?.execute_query?.allow_write || false;
+      const allowWrite =
+        config.providers?.database?.security?.allow_write ??
+        config.security?.execute_query?.allow_write ??
+        false;
       if (!allowWrite) {
         throw new ToolError(
           "DATABASE_WRITE_DISABLED",
           "Database write queries are disabled.",
-          "Ask the user to enable security.execute_query.allow_write if this write is intentional, then retry this tool.",
+          "Ask the user to enable providers.database.security.allow_write if this write is intentional, then retry this tool.",
           true,
-          { configKey: "security.execute_query.allow_write" },
+          { configKey: "providers.database.security.allow_write" },
         );
       }
       // Check blocked environments
-      const blockedEnvs = config.security?.execute_query?.blocked_env || [
-        "production",
-        "prod",
-      ];
+      const blockedEnvs = config.providers?.database?.security?.blocked_env ??
+        config.security?.execute_query?.blocked_env ?? ["production", "prod"];
       // Try to detect env from DSN or connection name
       if (
         blockedEnvs.some((env: any) =>
@@ -85,7 +96,7 @@ export const executeQueryTool: Tool = {
       finalQuery = `${finalQuery} LIMIT ${limit}`;
     }
 
-    const engine = config.database.default_engine || "postgresql";
+    const engine = db?.default_engine || "postgresql";
     const provider = createProvider(engine);
     const queryParams = params.params || [];
 

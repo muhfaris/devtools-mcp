@@ -41,7 +41,16 @@ export const gitlabGetCommitsTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config?.gitlab) {
+    if (config?.providers?.gitlab?.enabled === false) {
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab is disabled in configuration.",
+        "Enable providers.gitlab.enabled in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.gitlab.enabled" },
+      );
+    }
+    if (!config?.providers?.gitlab && !config?.gitlab) {
       throw new ToolError(
         "CONFIG_REQUIRED",
         "GitLab configuration is required.",

@@ -32,10 +32,17 @@ export const getDbSchemaTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
+    if (config?.providers?.database?.enabled === false) {
+      throw new Error(
+        "Database provider is disabled in configuration. Enable providers.database.enabled in .devtools/config.yaml.",
+      );
+    }
     const { connectionName, connection: connConfig } =
       requireDatabaseConnection(config, params.connection);
 
-    const engine = config.database.default_engine || "postgresql";
+    const engine =
+      config.providers?.database?.default_engine ??
+      (config.database?.default_engine || "postgresql");
     const provider = createProvider(engine);
 
     const cacheKey = `${connectionName}:${params.table || "all"}`;

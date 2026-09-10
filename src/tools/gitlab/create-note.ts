@@ -43,6 +43,18 @@ export const gitlabCreateNoteTool: Tool = {
       optional: true,
       description: "Line number for code comment (requires position)",
     },
+    start_line: {
+      type: "number",
+      optional: true,
+      description:
+        "Start line for a multi-line code comment (requires end_line and path)",
+    },
+    end_line: {
+      type: "number",
+      optional: true,
+      description:
+        "End line for a multi-line code comment (requires start_line and path)",
+    },
     path: {
       type: "string",
       optional: true,
@@ -57,7 +69,16 @@ export const gitlabCreateNoteTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (!config?.gitlab) {
+    if (config?.providers?.gitlab?.enabled === false) {
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab is disabled in configuration.",
+        "Enable providers.gitlab.enabled in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.gitlab.enabled" },
+      );
+    }
+    if (!config?.providers?.gitlab && !config?.gitlab) {
       throw new ToolError(
         "CONFIG_REQUIRED",
         "GitLab configuration is required.",
@@ -85,8 +106,12 @@ export const gitlabCreateNoteTool: Tool = {
     try {
       let response;
 
-      // Check if it's a code comment (line + path provided)
-      if (params.line && params.path) {
+      // Check if it's a code comment (path + line, or path + start/end line)
+      const isMultiLine =
+        params.start_line && params.end_line && params.path;
+      const isSingleLine = params.line && params.path;
+
+      if (isMultiLine || isSingleLine) {
         // Get the latest commit SHA for this MR
         const mr = await client.MergeRequests.show(projectId, mrId);
         const sha = mr.sha || mr.diff_refs?.head_sha;
@@ -95,24 +120,49 @@ export const gitlabCreateNoteTool: Tool = {
           throw new Error("Could not determine commit SHA for code comment");
         }
 
+        const baseSha = mr.diff_refs?.base_sha || sha;
+        const headSha = mr.diff_refs?.head_sha || sha;
+        const startSha = mr.diff_refs?.start_sha || sha;
+        const newLine = params.side === "right" ? Number(params.line) : undefined;
+        const oldLine = params.side === "left" ? Number(params.line) : undefined;
+
+        const position: any = {
+          base_sha: baseSha,
+          head_sha: headSha,
+          start_sha: startSha,
+          new_line: newLine,
+          old_line: oldLine,
+          position_type: "text",
+          new_path: params.path,
+          old_path: params.path,
+        };
+
+        if (isMultiLine) {
+          const start = Number(params.start_line);
+          const end = Number(params.end_line);
+          const lineCode = (n: number) =>
+            `${headSha}_${params.path}_${n}`;
+          position.line_range = {
+            start: {
+              line_code: lineCode(start),
+              new_line: params.side === "right" ? start : undefined,
+              old_line: params.side === "left" ? start : undefined,
+              type: params.side === "left" ? "old" : "new",
+            },
+            end: {
+              line_code: lineCode(end),
+              new_line: params.side === "right" ? end : undefined,
+              old_line: params.side === "left" ? end : undefined,
+              type: params.side === "left" ? "old" : "new",
+            },
+          };
+        }
+
         response = await (client.MergeRequestNotes.create as any)(
           projectId,
           mrId,
           body,
-          {
-            position: {
-              base_sha: mr.diff_refs?.base_sha || sha,
-              head_sha: mr.diff_refs?.head_sha || sha,
-              start_sha: mr.diff_refs?.start_sha || sha,
-              new_line:
-                params.side === "right" ? Number(params.line) : undefined,
-              old_line:
-                params.side === "left" ? Number(params.line) : undefined,
-              position_type: "text",
-              new_path: params.path,
-              old_path: params.path,
-            },
-          },
+          { position },
         );
       } else {
         // Regular comment

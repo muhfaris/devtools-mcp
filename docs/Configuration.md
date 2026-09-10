@@ -25,23 +25,45 @@ manually to each MCP client. Just place one file at the project root.
 id_generator:
   default: ulid
 
-database:
-  default_engine: postgresql
-  connections:
-    dev:
-      dsn: ${DEV_DATABASE_URL}
-      readonly: false
+providers:
+  database:
+    enabled: true
+    default_engine: postgresql
+    connections:
+      dev:
+        dsn: ${DEV_DATABASE_URL}
+        readonly: false
+    security:
+      allow_write: false
+      blocked_env: [production, prod]
 
-security:
-  execute_query:
-    allow_write: false
-    blocked_env: [production, prod]
+  gitlab:
+    enabled: true
+    url: https://gitlab.com
+    token: ${GITLAB_TOKEN}
+    projectId: 12345
+    security:
+      blocked_env: [production, prod] # protects create_note, etc.
 
-gitlab:
-  url: https://gitlab.com
-  token: ${GITLAB_TOKEN}
-  projectId: 12345
+  redis:
+    enabled: true
+    default_connection: dev
+    connections:
+      dev:
+        url: ${REDIS_URL}
+        readonly: true
+        timeout: 5000
+      cache:
+        url: redis://localhost:6379/1
+        readonly: true
+    security:
+      allow_write: false
+      blocked_env: [production, prod]
 ```
+
+Each provider is gated by its own `enabled` flag. Providers are initialized
+lazily — only when a tool that needs them is first invoked — so running an
+unrelated tool (e.g. `id`) never triggers GitLab, database, or Redis setup.
 
 ## Environment variable resolution
 
@@ -49,10 +71,11 @@ gitlab:
 load time. A `.env` file in the working directory is also loaded via dotenv.
 
 ```yaml
-database:
-  connections:
-    dev:
-      dsn: ${DEV_DATABASE_URL}   # resolves to process.env.DEV_DATABASE_URL
+providers:
+  database:
+    connections:
+      dev:
+        dsn: ${DEV_DATABASE_URL}   # resolves to process.env.DEV_DATABASE_URL
 ```
 
 ## Load order (priority: high → low)
@@ -73,7 +96,7 @@ torn down if removed.
 
 | Key | Default | Purpose |
 | :--- | :--- | :--- |
-| `security.execute_query.allow_write` | `false` | Allow write queries |
-| `security.execute_query.blocked_env` | `[]` | Environments where writes are blocked |
+| `providers.database.security.allow_write` | `false` | Allow write queries |
+| `providers.database.security.blocked_env` | `[]` | Environments where writes are blocked |
 
 Credentials are never logged or returned in tool responses.

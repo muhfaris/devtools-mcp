@@ -27,12 +27,18 @@ export const gitlabSetConfigTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config || {};
-    if (!config.gitlab) config.gitlab = {};
+    if (!config.providers) config.providers = {};
+    // Seed from legacy top-level gitlab config so existing token/url/projectId
+    // are preserved when migrating to the providers.* shape.
+    if (!config.providers.gitlab && config.gitlab) {
+      config.providers.gitlab = { ...config.gitlab };
+    }
+    if (!config.providers.gitlab) config.providers.gitlab = {};
 
     const updatedFields: string[] = [];
     for (const field of ["token", "url", "projectId"] as const) {
       if (params[field] !== undefined) {
-        config.gitlab[field] = params[field];
+        config.providers.gitlab[field] = params[field];
         updatedFields.push(field);
       }
     }

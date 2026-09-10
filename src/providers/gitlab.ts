@@ -52,7 +52,8 @@ export const parseGitLabUrl = (input: string): ParsedGitLabUrl => {
 };
 
 export const initGitLab = (config: Config) => {
-  if (!config.gitlab) {
+  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  if (!gitlab) {
     throw new ToolError(
       "CONFIG_REQUIRED",
       "GitLab configuration is required.",
@@ -62,7 +63,7 @@ export const initGitLab = (config: Config) => {
     );
   }
 
-  const { url, token, projectId: pid } = config.gitlab;
+  const { url, token, projectId: pid } = gitlab;
   if (!token) {
     throw new ToolError(
       "GITLAB_TOKEN_REQUIRED",
@@ -85,13 +86,17 @@ export const clearGitLab = () => {
 
 export const getGitLabClient = () => {
   if (!gitlabClient) {
-    throw new ToolError(
-      "CONFIG_REQUIRED",
-      "GitLab is not initialized.",
-      "Configure GitLab with gitlab_set_config, then retry this tool.",
-      true,
-      { configKey: "gitlab", setupTool: "gitlab_set_config" },
-    );
+    const config = (global as any).__devtools_config;
+    if (config?.providers?.gitlab?.enabled === false) {
+      throw new ToolError(
+        "CONFIG_REQUIRED",
+        "GitLab is disabled in configuration.",
+        "Enable providers.gitlab.enabled in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.gitlab.enabled" },
+      );
+    }
+    initGitLab(config);
   }
   return gitlabClient;
 };
@@ -128,7 +133,10 @@ export const resolveProjectId = (
     if (parsed.projectPath) return parsed.projectPath;
   }
 
-  const id = params.project_id ?? config.gitlab?.projectId;
+  const id =
+    params.project_id ??
+    config.providers?.gitlab?.projectId ??
+    config.gitlab?.projectId;
   if (id === undefined || id === null || id === "") {
     throw createProjectIdRequiredError();
   }
@@ -179,7 +187,8 @@ export const resolveMrId = (params: Record<string, unknown>): number => {
 };
 
 export const getGitLabConfig = (config: Config) => {
-  if (!config.gitlab) {
+  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  if (!gitlab) {
     throw new ToolError(
       "CONFIG_REQUIRED",
       "GitLab configuration is required.",
@@ -188,13 +197,14 @@ export const getGitLabConfig = (config: Config) => {
       { configKey: "gitlab", setupTool: "gitlab_set_config" },
     );
   }
-  return config.gitlab;
+  return gitlab;
 };
 
 export const getGitLabWebUrl = (
   config: Config,
   resolvedProjectId: string | number,
 ) => {
-  const host = (config.gitlab?.url || "https://gitlab.com").replace(/\/+$/, "");
+  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  const host = (gitlab?.url || "https://gitlab.com").replace(/\/+$/, "");
   return `${host}/${resolvedProjectId}`;
 };
