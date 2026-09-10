@@ -88,6 +88,16 @@ describe("redis write tools", () => {
       expect(data.key).toBe("user:1");
     });
 
+    it("normalizes a valid mode", async () => {
+      const result = await redisSetKeyTool.execute({
+        key: "test",
+        value: "x",
+        mode: "nx",
+      });
+      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      expect(data.mode).toBe("NX");
+    });
+
     it("rejects invalid mode", async () => {
       await expect(
         redisSetKeyTool.execute({ key: "test", value: "x", mode: "invalid" }),

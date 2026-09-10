@@ -27,6 +27,7 @@ import { gitlabSetConfigTool } from "./gitlab/set-config.js";
 import { databaseSetConnectionTool } from "./database/set-connection.js";
 import { showConfigTool } from "./config/show.js";
 import { reloadConfigTool } from "./config/reload.js";
+import { providersInfoTool } from "./providers/info.js";
 import {
   jsonMinifyTool,
   jsonFormatTool,
@@ -76,6 +77,7 @@ export const registerAllTools = async (
   registry.register(databaseSetConnectionTool);
   registry.register(showConfigTool);
   registry.register(reloadConfigTool);
+  registry.register(providersInfoTool);
   registry.register(jsonMinifyTool);
   registry.register(jsonFormatTool);
   registry.register(jsonValidateTool);

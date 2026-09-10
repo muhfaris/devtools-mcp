@@ -1,27 +1,44 @@
-# DevTools MCP Configuration
-id_generator:
-  default: ulid
+# ============================================================
+# DevTools MCP — Full Configuration Reference
+# ============================================================
+# Providers are initialized lazily: only when a tool that needs
+# them is first invoked. Each provider is gated by `enabled`.
+# ${ENV_VAR} placeholders resolve from process.env / .env at load.
+# ============================================================
 
+# --- ID generator -------------------------------------------------
+id_generator:
+  default: ulid # ulid | uuid
+
+# --- Providers -----------------------------------------------------
 providers:
+  # --- Database ---------------------------------------------------
   database:
     enabled: true
-    default_engine: postgresql
+    default_engine: postgresql # postgresql | mysql | mariadb
     connections:
       dev:
         dsn: ${DEV_DATABASE_URL}
         readonly: false
+        pool_size: 10 # optional, default 10
+        timeout: 30000 # optional, idle timeout ms, default 30000
+      staging:
+        dsn: ${STAGING_DATABASE_URL}
+        readonly: true
     security:
-      allow_write: false
+      allow_write: false # allow non-SELECT queries
       blocked_env: [production, prod]
 
+  # --- GitLab -----------------------------------------------------
   gitlab:
     enabled: true
-    url: https://gitlab.com
-    token: ${GITLAB_TOKEN}
-    projectId: 12345
+    url: https://gitlab.com # or self-hosted instance
+    token: ${GITLAB_TOKEN} # PAT with api scope
+    projectId: 12345 # numeric ID or path (group/repo)
     security:
       blocked_env: [production, prod] # protects create_note, etc.
 
+  # --- Redis ------------------------------------------------------
   redis:
     enabled: true
     default_connection: dev
@@ -29,10 +46,16 @@ providers:
       dev:
         url: ${REDIS_URL}
         readonly: true
-        timeout: 5000
+        db: 0 # optional, default 0
+        timeout: 5000 # optional, connect timeout ms, default 5000
       cache:
         url: redis://localhost:6379/1
         readonly: true
     security:
       allow_write: false
       blocked_env: [production, prod]
+
+# --- Codegraph (optional) -----------------------------------------
+# codegraph:
+#   enabled: true
+#   exclude: ["node_modules", "dist"]

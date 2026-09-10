@@ -36,9 +36,13 @@ export const redisSetKeyTool: Tool = {
     if (!key) throw new Error("Key is required");
     if (params.value === undefined) throw new Error("Value is required");
 
-    const mode = params.mode ? String(params.mode).toUpperCase() : undefined;
-    if (mode && mode !== "NX" && mode !== "XX") {
-      throw new Error('Mode must be "NX" or "XX"');
+    let mode: "NX" | "XX" | undefined;
+    if (params.mode) {
+      const normalizedMode = String(params.mode).toUpperCase();
+      if (normalizedMode !== "NX" && normalizedMode !== "XX") {
+        throw new Error('Mode must be "NX" or "XX"');
+      }
+      mode = normalizedMode;
     }
 
     const ttl = params.ttl ? Number(params.ttl) : undefined;

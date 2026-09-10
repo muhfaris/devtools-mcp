@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import type { RedisConnectionConfig } from "../core/types.js";
 
 export interface RedisKeyInfo {
@@ -148,7 +148,12 @@ export class RedisProvider {
         break;
       }
       case "zset": {
-        value = await client.zrange(key, 0, limit - 1, "WITHSCORES");
+        value = await client.zrange(
+          key,
+          0,
+          String(limit - 1),
+          "WITHSCORES",
+        );
         truncated = (await client.zcard(key)) > limit;
         break;
       }
