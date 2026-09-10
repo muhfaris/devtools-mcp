@@ -105,6 +105,34 @@ const validateDiffPosition = (
 const getDiffLines = (diff: MergeRequestDiff) =>
   collectCommentableLines(diff.diff);
 
+const validateInlineResponse = (
+  discussion: Record<string, any>,
+  params: Record<string, any>,
+) => {
+  const note = discussion.notes?.[0];
+  const position = note?.position;
+  const side = params.side === "left" ? "left" : "right";
+  const pathKey = side === "left" ? "old_path" : "new_path";
+  const lineKey = side === "left" ? "old_line" : "new_line";
+  const hasRange = params.start_line !== undefined && params.end_line !== undefined;
+  const matchesLine = hasRange
+    ? Number(position?.line_range?.start?.[lineKey]) === Number(params.start_line) &&
+      Number(position?.line_range?.end?.[lineKey]) === Number(params.end_line)
+    : Number(position?.[lineKey]) === Number(params.line);
+
+  if (!note || note.resolvable !== true || position?.[pathKey] !== params.path || !matchesLine) {
+    throw new ToolError(
+      "GITLAB_INLINE_POSITION_MISSING",
+      "GitLab created a discussion without the requested diff position.",
+      "Verify the merge request, changed path, side, and line numbers; do not report the inline comment as successful.",
+      false,
+      { parameter: "path" },
+    );
+  }
+
+  return { note, position };
+};
+
 const createLineCode = (
   path: string,
   side: "left" | "right",
@@ -303,6 +331,8 @@ export const gitlabCreateNoteTool: Tool = {
 
     try {
       let response;
+      let discussionId: string | undefined;
+      let inlinePosition: Record<string, any> | undefined;
 
       if (isMultiLine || isSingleLine) {
         // Get the latest commit SHA for this MR
@@ -362,12 +392,19 @@ export const gitlabCreateNoteTool: Tool = {
           };
         }
 
-        response = await (client.MergeRequestNotes.create as any)(
+        const discussion = await client.MergeRequestDiscussions.create(
           projectId,
           mrId,
           body,
           { position },
         );
+        const validated = validateInlineResponse(
+          discussion as Record<string, any>,
+          params,
+        );
+        response = validated.note;
+        inlinePosition = validated.position;
+        discussionId = String(discussion.id);
       } else {
         // Regular comment
         response = await client.MergeRequestNotes.create(projectId, mrId, body);
@@ -381,6 +418,11 @@ export const gitlabCreateNoteTool: Tool = {
         createdAt: response.created_at,
         url: `${getGitLabWebUrl(config, projectId)}/-/merge_requests/${mrId}#note_${response.id}`,
         success: true,
+        ...(discussionId && {
+          discussionId,
+          resolvable: true,
+          position: inlinePosition,
+        }),
       };
 
       return {
