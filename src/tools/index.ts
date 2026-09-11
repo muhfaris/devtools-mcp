@@ -41,6 +41,7 @@ import { redisSlowlogTool } from "./redis/slowlog.js";
 import { redisSetKeyTool } from "./redis/set-key.js";
 import { redisDeleteKeyTool } from "./redis/delete-key.js";
 import { redisExpireKeyTool } from "./redis/expire-key.js";
+import { fakePersonTool, fakeCompanyTool } from "./dummy-data/index.js";
 
 // In registerAllTools:
 export { createRegistry } from "../core/registry.js";
@@ -89,4 +90,6 @@ export const registerAllTools = async (
   registry.register(redisSetKeyTool);
   registry.register(redisDeleteKeyTool);
   registry.register(redisExpireKeyTool);
+  registry.register(fakePersonTool);
+  registry.register(fakeCompanyTool);
 };

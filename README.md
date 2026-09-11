@@ -35,6 +35,7 @@ The `docs/` directory is the source of truth. Each topic lives in one place:
 | [Configuration](./docs/Configuration.md) | `.devtools/config.yaml`, env resolution, live reload |
 | [MCP Clients](./docs/MCP-Clients.md) | Setup for Claude Code, Cursor, CodeCompanion, Codex, Inspector |
 | [Tools](./docs/Tools.md) | Full tool reference with params and CLI examples |
+| [Dummy Data](./docs/Dummy.md) | Locale-aware fake data generation (person, company, tax IDs) |
 | [Development](./docs/Development.md) | Build, test, add a tool, publish |
 | [PRD](./docs/PRD.md) | Product vision, scope, roadmap |
 

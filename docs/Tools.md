@@ -9,6 +9,18 @@
 | `generate_ulid` | Generate ULID(s) | `devtools generate_ulid --count 5` |
 | `generate_uuid` | Generate UUID v4(s) | `devtools generate_uuid --count 3` |
 
+
+## Dummy data
+
+| Tool | Description | CLI example |
+| :--- | :--- | :--- |
+| `fake_person` | Generate realistic dummy person records with locale support | `devtools fake_person --count 5 --locale id` |
+| `fake_company` | Generate realistic dummy company records with localized tax IDs | `devtools fake_company --count 5 --locale sg` |
+
+See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `sg`) and tax ID format specifications.
+
+
+
 ## Encoding & security
 
 | Tool | Description | CLI example |
@@ -19,6 +31,7 @@
 | `hash_generate` | Generate MD5/SHA1/SHA256/SHA512 | `devtools hash_generate --text "hello" --algorithm sha256` |
 | `secret_generate` | Generate secure random secret | `devtools secret_generate --length 32 --format base64` |
 | `regex_test` | Test regex against a string | `devtools regex_test --pattern '^[a-z]+$' --text "hello"` |
+
 
 ## Misc utilities
 
