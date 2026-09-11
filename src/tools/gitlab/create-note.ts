@@ -108,16 +108,17 @@ const getDiffLines = (diff: MergeRequestDiff) =>
 const validateInlineResponse = (
   discussion: Record<string, any>,
   params: Record<string, any>,
+  isMultiLine: boolean,
 ) => {
   const note = discussion.notes?.[0];
   const position = note?.position;
   const side = params.side === "left" ? "left" : "right";
   const pathKey = side === "left" ? "old_path" : "new_path";
   const lineKey = side === "left" ? "old_line" : "new_line";
-  const hasRange = params.start_line !== undefined && params.end_line !== undefined;
-  const matchesLine = hasRange
-    ? Number(position?.line_range?.start?.[lineKey]) === Number(params.start_line) &&
-      Number(position?.line_range?.end?.[lineKey]) === Number(params.end_line)
+  const matchesLine = isMultiLine
+    ? (Number(position?.line_range?.start?.[lineKey]) === Number(params.start_line) ||
+        Number(position?.line_range?.end?.[lineKey]) === Number(params.end_line) ||
+        Number(position?.[lineKey]) === Number(params.end_line))
     : Number(position?.[lineKey]) === Number(params.line);
 
   if (!note || note.resolvable !== true || position?.[pathKey] !== params.path || !matchesLine) {
@@ -148,15 +149,6 @@ const createLineCode = (
 const validateInlinePosition = (
   params: Record<string, any>,
 ): InlinePosition => {
-  const hasStart = params.start_line !== undefined && params.start_line !== null;
-  const hasEnd = params.end_line !== undefined && params.end_line !== null;
-  const hasCompleteRange = hasStart && hasEnd;
-  const hasLine = params.line !== undefined && params.line !== null &&
-    !(Number(params.line) === 0 && hasCompleteRange);
-  const hasPath = params.path !== undefined && params.path !== null;
-  const hasRange = hasStart || hasEnd;
-  const hasPosition = hasLine || hasRange || hasPath;
-
   const invalid = (message: string, action: string, parameter: string) => {
     throw new ToolError(
       "GITLAB_INLINE_POSITION_INVALID",
@@ -176,55 +168,111 @@ const validateInlinePosition = (
       "side",
     );
   }
-  if (hasLine && hasRange) {
-    invalid(
-      "line cannot be combined with start_line or end_line.",
-      "For one line, provide path and line. For a range, provide path, start_line, and end_line.",
-      "line",
-    );
+
+  const rawLine = params.line !== undefined && params.line !== null ? Number(params.line) : undefined;
+  const rawStart = params.start_line !== undefined && params.start_line !== null ? Number(params.start_line) : undefined;
+  const rawEnd = params.end_line !== undefined && params.end_line !== null ? Number(params.end_line) : undefined;
+
+  const validLine = rawLine !== undefined && isPositiveInteger(rawLine) ? rawLine : undefined;
+  const validStart = rawStart !== undefined && isPositiveInteger(rawStart) ? rawStart : undefined;
+  const validEnd = rawEnd !== undefined && isPositiveInteger(rawEnd) ? rawEnd : undefined;
+
+  let finalLine: number | undefined = validLine;
+  let finalStart: number | undefined = validStart;
+  let finalEnd: number | undefined = validEnd;
+
+  if (finalLine !== undefined && finalStart !== undefined && finalEnd !== undefined) {
+    if (finalStart === finalEnd) {
+      if (finalLine === finalStart) {
+        finalStart = undefined;
+        finalEnd = undefined;
+      } else {
+        invalid(
+          "line cannot be combined with start_line or end_line.",
+          "For one line, provide path and line. For a range, provide path, start_line, and end_line.",
+          "line",
+        );
+      }
+    } else {
+      invalid(
+        "line cannot be combined with start_line or end_line.",
+        "For one line, provide path and line. For a range, provide path, start_line, and end_line.",
+        "line",
+      );
+    }
+  } else if (finalLine !== undefined && (finalStart !== undefined || finalEnd !== undefined)) {
+    const other = finalStart !== undefined ? finalStart : finalEnd;
+    if (finalLine === other) {
+      finalStart = undefined;
+      finalEnd = undefined;
+    } else {
+      invalid(
+        "line cannot be combined with start_line or end_line.",
+        "For one line, provide path and line. For a range, provide path, start_line, and end_line.",
+        "line",
+      );
+    }
+  } else if (finalStart !== undefined && finalEnd !== undefined && finalStart === finalEnd && finalLine === undefined) {
+    finalLine = finalStart;
+    finalStart = undefined;
+    finalEnd = undefined;
   }
-  if (hasStart !== hasEnd) {
-    invalid(
-      "start_line and end_line must be provided together.",
-      "Provide both start_line and end_line for a range, or use line for a single-line comment.",
-      hasStart ? "end_line" : "start_line",
-    );
+
+  if (finalLine !== undefined) params.line = finalLine;
+  if (finalStart !== undefined) params.start_line = finalStart;
+  else if (params.start_line !== undefined && finalLine !== undefined) delete params.start_line;
+  if (finalEnd !== undefined) params.end_line = finalEnd;
+  else if (params.end_line !== undefined && finalLine !== undefined) delete params.end_line;
+
+  const isSingle = finalLine !== undefined;
+  const isMulti = finalStart !== undefined && finalEnd !== undefined;
+
+  if (!isSingle && !isMulti) {
+    if (rawLine !== undefined && rawLine <= 0 && rawStart === undefined && rawEnd === undefined && params.path) {
+      invalid("line must be a positive integer.", "Provide a line number greater than zero.", "line");
+    }
+    if (rawStart !== undefined && rawStart > 0 && (rawEnd === undefined || rawEnd <= 0)) {
+      invalid(
+        "start_line and end_line must be provided together.",
+        "Provide both start_line and end_line for a range, or use line for a single-line comment.",
+        "end_line",
+      );
+    }
+    if (rawEnd !== undefined && rawEnd > 0 && (rawStart === undefined || rawStart <= 0)) {
+      invalid(
+        "start_line and end_line must be provided together.",
+        "Provide both start_line and end_line for a range, or use line for a single-line comment.",
+        "start_line",
+      );
+    }
   }
-  if (hasPosition && (!hasPath || typeof params.path !== "string" || !params.path.trim())) {
+
+  const hasPath = params.path !== undefined && params.path !== null && typeof params.path === "string" && params.path.trim().length > 0;
+  const hasRawPath = params.path !== undefined && params.path !== null;
+
+  if ((isSingle || isMulti) && !hasPath) {
     invalid(
       "A non-empty path is required for an inline comment.",
       "Provide the changed file path together with line, or with start_line and end_line.",
       "path",
     );
   }
-  if (hasPath && !hasLine && !hasRange) {
+  if (hasRawPath && !isSingle && !isMulti) {
     invalid(
       "A path alone does not identify an inline comment position.",
       "Provide line for a single-line comment, or start_line and end_line for a range.",
       "line",
     );
   }
-  if (hasLine && !isPositiveInteger(params.line)) {
-    invalid("line must be a positive integer.", "Provide a line number greater than zero.", "line");
-  }
-  if (hasRange) {
-    if (!isPositiveInteger(params.start_line) || !isPositiveInteger(params.end_line)) {
-      invalid(
-        "start_line and end_line must be positive integers.",
-        "Provide range line numbers greater than zero.",
-        !isPositiveInteger(params.start_line) ? "start_line" : "end_line",
-      );
-    }
-    if (Number(params.start_line) > Number(params.end_line)) {
-      invalid(
-        "start_line cannot be greater than end_line.",
-        "Provide an ascending range where start_line is less than or equal to end_line.",
-        "start_line",
-      );
-    }
+  if (isMulti && Number(finalStart) > Number(finalEnd)) {
+    invalid(
+      "start_line cannot be greater than end_line.",
+      "Provide an ascending range where start_line is less than or equal to end_line.",
+      "start_line",
+    );
   }
 
-  return { isSingleLine: hasLine && hasPath, isMultiLine: hasRange && hasPath };
+  return { isSingleLine: isSingle && hasPath, isMultiLine: isMulti && hasPath };
 };
 
 export const gitlabCreateNoteTool: Tool = {
@@ -351,12 +399,10 @@ export const gitlabCreateNoteTool: Tool = {
         const baseSha = mr.diff_refs?.base_sha || sha;
         const headSha = mr.diff_refs?.head_sha || sha;
         const startSha = mr.diff_refs?.start_sha || sha;
-        const newLine = isSingleLine && params.side === "right"
-          ? Number(params.line)
-          : undefined;
-        const oldLine = isSingleLine && params.side === "left"
-          ? Number(params.line)
-          : undefined;
+        const isRight = params.side !== "left";
+        const targetLine = isSingleLine ? Number(params.line) : Number(params.end_line);
+        const newLine = isRight ? targetLine : undefined;
+        const oldLine = !isRight ? targetLine : undefined;
 
         const position: any = {
           base_sha: baseSha,
@@ -374,20 +420,21 @@ export const gitlabCreateNoteTool: Tool = {
           const end = Number(params.end_line);
           const diffLines = getDiffLines(changedFile);
           const side = params.side === "left" ? "left" : "right";
+          const filePath = side === "left" ? changedFile.old_path : changedFile.new_path;
           const lineCode = (n: number) =>
-            createLineCode(changedFile.new_path, side, n, diffLines);
+            createLineCode(filePath, side, n, diffLines);
           position.line_range = {
             start: {
               line_code: lineCode(start),
-              new_line: params.side === "right" ? start : undefined,
-              old_line: params.side === "left" ? start : undefined,
-              type: params.side === "left" ? "old" : "new",
+              new_line: side === "right" ? start : undefined,
+              old_line: side === "left" ? start : undefined,
+              type: side === "left" ? "old" : "new",
             },
             end: {
               line_code: lineCode(end),
-              new_line: params.side === "right" ? end : undefined,
-              old_line: params.side === "left" ? end : undefined,
-              type: params.side === "left" ? "old" : "new",
+              new_line: side === "right" ? end : undefined,
+              old_line: side === "left" ? end : undefined,
+              type: side === "left" ? "old" : "new",
             },
           };
         }
@@ -401,6 +448,7 @@ export const gitlabCreateNoteTool: Tool = {
         const validated = validateInlineResponse(
           discussion as Record<string, any>,
           params,
+          isMultiLine,
         );
         response = validated.note;
         inlinePosition = validated.position;

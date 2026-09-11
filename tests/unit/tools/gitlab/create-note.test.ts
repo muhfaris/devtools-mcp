@@ -188,6 +188,7 @@ describe("gitlab_create_note", () => {
     });
 
     const [, , , options] = mockDiscussionCreate.mock.calls[0];
+    expect(options.position.new_line).toBe(15);
     expect(options.position.line_range).toMatchObject({
       start: { new_line: 10, old_line: undefined, type: "new" },
       end: { new_line: 15, old_line: undefined, type: "new" },
@@ -201,6 +202,73 @@ describe("gitlab_create_note", () => {
       position: { new_path: "src/app.ts" },
     });
     expect(res.url).toContain("#note_777");
+  });
+
+  it("posts a single-line code comment when start_line and end_line are serialized as zero", async () => {
+    const mockDiscussionCreate = vi.fn().mockImplementation(
+      (_projectId, _mrId, body, options) => Promise.resolve({
+        id: "discussion-778",
+        notes: [{
+          id: 778,
+          body,
+          author: { username: "tester" },
+          created_at: "2026-09-09T00:00:00Z",
+          resolvable: true,
+          position: options.position,
+        }],
+      }),
+    );
+    (global as any).__devtools_config = {
+      gitlab: {
+        url: "https://gitlab.com",
+        token: "token",
+        projectId: 100,
+      },
+    };
+
+    const gitlabMod = await import("../../../../src/providers/gitlab.js");
+    gitlabMod.initGitLab((global as any).__devtools_config);
+    const client = gitlabMod.getGitLabClient();
+    (client as any).MergeRequests = {
+      show: vi.fn().mockResolvedValue({
+        sha: "abc123",
+        diff_refs: {
+          base_sha: "base",
+          head_sha: "head",
+          start_sha: "start",
+        },
+      }),
+      allDiffs: vi.fn().mockResolvedValue([
+        {
+          old_path: "src/app.ts",
+          new_path: "src/app.ts",
+          diff: "@@ -8,9 +8,9 @@\n context\n-old\n+new\n context\n context\n context\n context\n context\n context\n context",
+        },
+      ]),
+    };
+    (client as any).MergeRequestDiscussions = {
+      create: mockDiscussionCreate,
+    };
+
+    const res = await parseToolJson(gitlabCreateNoteTool, {
+      project_id: 200,
+      mr_id: 12,
+      body: "Single-line review with zero range",
+      path: "src/app.ts",
+      line: 9,
+      start_line: 0,
+      end_line: 0,
+      side: "right",
+    });
+
+    const [, , , options] = mockDiscussionCreate.mock.calls[0];
+    expect(options.position.new_line).toBe(9);
+    expect(options.position.line_range).toBeUndefined();
+    expect(res).toMatchObject({
+      id: 778,
+      discussionId: "discussion-778",
+      resolvable: true,
+    });
   });
 
   it.each([
@@ -286,6 +354,68 @@ describe("gitlab_create_note", () => {
     });
 
     expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["line === start_line === end_line (10, 10, 10)", { line: 10, start_line: 10, end_line: 10 }, 10, false],
+    ["start_line === end_line without line (10, 10)", { start_line: 10, end_line: 10 }, 10, false],
+    ["line with redundant single start_line (10, 10)", { line: 10, start_line: 10 }, 10, false],
+    ["line with redundant single end_line (10, 10)", { line: 10, end_line: 10 }, 10, false],
+  ])("accepts redundant position parameters: %s", async (_desc, params, expectedTargetLine, isRange) => {
+    const mockCreate = vi.fn().mockImplementation(
+      (_projectId, _mrId, body, options) => Promise.resolve({
+        id: "discussion-888",
+        notes: [{
+          id: 888,
+          body,
+          author: { username: "tester" },
+          created_at: "2026-09-09T00:00:00Z",
+          resolvable: true,
+          position: options.position,
+        }],
+      }),
+    );
+    (global as any).__devtools_config = {
+      gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+    };
+    const gitlabMod = await import("../../../../src/providers/gitlab.js");
+    gitlabMod.initGitLab((global as any).__devtools_config);
+    const client = gitlabMod.getGitLabClient();
+    (client as any).MergeRequests = {
+      show: vi.fn().mockResolvedValue({
+        sha: "head",
+        diff_refs: { base_sha: "base", head_sha: "head", start_sha: "start" },
+      }),
+      allDiffs: vi.fn().mockResolvedValue([
+        {
+          old_path: "src/app.ts",
+          new_path: "src/app.ts",
+          diff: "@@ -8,9 +8,9 @@\n context\n-old\n+new\n context\n context\n context\n context\n context\n context\n context",
+        },
+      ]),
+    };
+    (client as any).MergeRequestDiscussions = { create: mockCreate };
+
+    const res = await parseToolJson(gitlabCreateNoteTool, {
+      mr_id: 12,
+      body: "Test comment",
+      path: "src/app.ts",
+      side: "right",
+      ...params,
+    });
+
+    const [, , , options] = mockCreate.mock.calls[0];
+    expect(options.position.new_line).toBe(expectedTargetLine);
+    if (isRange) {
+      expect(options.position.line_range).toBeDefined();
+    } else {
+      expect(options.position.line_range).toBeUndefined();
+    }
+    expect(res).toMatchObject({
+      id: 888,
+      discussionId: "discussion-888",
+      resolvable: true,
+    });
   });
 
   it("rejects an inline response without position metadata", async () => {
