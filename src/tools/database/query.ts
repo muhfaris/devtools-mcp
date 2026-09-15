@@ -89,8 +89,8 @@ export const executeQueryTool: Tool = {
       }
     }
 
-    // Add LIMIT to SELECT queries if not present
-    let finalQuery = query;
+    // Remove trailing statement terminators before appending clauses.
+    let finalQuery = query.replace(/;+\s*$/, "");
     if (!isWrite && !/LIMIT\s+\d+/i.test(finalQuery)) {
       const limit = Math.min(Number(params.limit) || 100, 1000);
       finalQuery = `${finalQuery} LIMIT ${limit}`;

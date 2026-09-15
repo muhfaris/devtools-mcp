@@ -144,6 +144,36 @@ Generate realistic dummy company records with locale-appropriate tax ID formats.
 
 ---
 
+### `public_holidays`
+
+Retrieve official verified public holidays or generate deterministic synthetic test holidays for `ID`, `MY`, `SG`, and `US`.
+
+**Parameters:**
+
+| Param | Type | Optional | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `country_code` | string | ❌ | — | ISO 3166-1 alpha-2 code: `ID`, `MY`, `SG`, `US` (case-insensitive) |
+| `start_date` | string | ✅ | `YYYY-01-01` | Start date in `YYYY-MM-DD` format |
+| `end_date` | string | ✅ | `YYYY-12-31` | End date in `YYYY-MM-DD` format |
+| `mode` | string | ✅ | `real` | `"real"` (fetches Nager.Date) or `"synthetic"` (offline generator) |
+| `seed` | number | ✅ | — | Random seed for reproducible output in synthetic mode |
+
+**Output fields:**
+
+| Field | Description |
+| :--- | :--- |
+| `count` | Total holidays in range |
+| `mode` | `"real"` or `"synthetic"` |
+| `country_code` | Normalized uppercase country code |
+| `start_date` | Effective start date |
+| `end_date` | Effective end date |
+| `data` | Array of holiday records: `date`, `name`, `local_name`, `country_code`, `types`, `verified`, `source` |
+
+> ⚠️ **Note on Synthetic Data:** Synthetic records are deterministically generated test fixtures for offline pipelines and must not be treated as legal or calendar truth. Real mode verifies official public holidays.
+
+
+---
+
 ## 💡 Usage Examples
 
 ### CLI

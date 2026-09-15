@@ -83,10 +83,24 @@ describe("providers_info", () => {
     expect(result.redis).toEqual({
       enabled: true,
       default_connection: "cache",
-      connections: ["cache"],
+      connections: {
+        cache: {
+          mode: "standalone",
+          url: "redis://:***@localhost:6379",
+          sentinels: [],
+          master_name: null,
+          role: null,
+          sentinel_tls: null,
+          auth_configured: true,
+          sentinel_auth_configured: false,
+          db: null,
+          readonly: true,
+          timeout: null,
+        },
+      },
     });
     expect(JSON.stringify(result)).not.toMatch(
-      /db-secret|redis-secret|glpat-secret|postgresql:\/\/|redis:\/\/|gitlab\.example|projectId/,
+      /db-secret|redis-secret|glpat-secret|glpat-|postgresql:\/\/|gitlab\.example|projectId/,
     );
     expect(mockedCreateProvider).not.toHaveBeenCalled();
   });

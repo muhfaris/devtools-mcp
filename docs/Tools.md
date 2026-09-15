@@ -16,6 +16,8 @@
 | :--- | :--- | :--- |
 | `fake_person` | Generate realistic dummy person records with locale support | `devtools fake_person --count 5 --locale id` |
 | `fake_company` | Generate realistic dummy company records with localized tax IDs | `devtools fake_company --count 5 --locale sg` |
+| `public_holidays` | Retrieve real or generate synthetic public holidays for ID, MY, SG, and US | `devtools public_holidays --country_code ID --mode real` |
+
 
 See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `sg`) and tax ID format specifications.
 
@@ -87,6 +89,11 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `redis_expire_key` | Set/remove TTL on a key | ✏️ | `devtools redis_expire_key --key session:abc --ttl 3600` |
 
 > Write tools require `readonly: false` in the connection config and are blocked in environments matching `security.execute_query.blocked_env`.
+
+Redis connections may be **standalone** (`url`) or **sentinel-backed**
+(`sentinels` + `master_name`). With Sentinel, the master is re-resolved on every
+connect, so failovers are transparent to all of the tools above. See
+[Configuration](./Configuration.md#redis-connection-fields) for the field list.
 
 
 ## Config tools

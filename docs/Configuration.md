@@ -56,10 +56,47 @@ providers:
       cache:
         url: redis://localhost:6379/1
         readonly: true
+      sentinel-dev:
+        sentinels:
+          - host: 127.0.0.1
+            port: 26379
+          - host: 127.0.0.1
+            port: 26380
+        master_name: mymaster
+        role: master # master | slave, default master
+        sentinel_username: ${REDIS_SENTINEL_USER}
+        sentinel_password: ${REDIS_SENTINEL_PASSWORD}
+        password: ${REDIS_PASSWORD}
+        db: 0
+        readonly: true
+        timeout: 5000
     security:
       allow_write: false
       blocked_env: [production, prod]
 ```
+
+### Redis connection fields
+
+A connection is either **standalone** (`url`) or **sentinel-backed**
+(`sentinels` + `master_name`) — exactly one of the two must be present.
+Sentinel connections resolve the current master via the Sentinel nodes on every
+connect, so failovers are picked up automatically.
+
+| Field | Applies to | Description |
+| :--- | :--- | :--- |
+| `url` | standalone | `redis://[user:pass@]host[:port][/db]` |
+| `sentinels` | sentinel | `{ host, port }` list. `port` defaults to `26379` |
+| `master_name` | sentinel | **Required.** Sentinel master group name |
+| `role` | sentinel | `master` (default) or `slave` |
+| `sentinel_username` / `sentinel_password` | sentinel | AUTH for the Sentinel nodes themselves |
+| `sentinel_tls` | sentinel | Enable TLS when talking to the sentinels |
+| `username` / `password` | both | AUTH for the data node (Redis 6+ ACL) |
+| `db` | both | Logical database index (default `0`) |
+| `readonly` | both | Defaults to `true`; required `false` for write tools |
+| `timeout` | both | Socket/connect timeout in ms (default `5000`) |
+
+`role: slave` resolves a replica; combined with `readonly: false` writes will
+fail with `READONLY`.
 
 Each provider is gated by its own `enabled` flag. Providers are initialized
 lazily — only when a tool that needs them is first invoked — so running an

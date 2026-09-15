@@ -1,5 +1,75 @@
-import { Redis } from "ioredis";
+import { Redis, type RedisOptions } from "ioredis";
 import type { RedisConnectionConfig } from "../core/types.js";
+
+const DEFAULT_SENTINEL_PORT = 26379;
+
+/**
+ * How many full passes over the sentinel list we allow before giving up.
+ * ioredis' own default retries forever, which turns a typo'd sentinel address
+ * into an MCP tool call that never returns.
+ */
+const SENTINEL_MAX_ROUNDS = 3;
+
+const hasSentinelNodes = (config: RedisConnectionConfig): boolean =>
+  Boolean(config.sentinels && config.sentinels.length > 0);
+
+function assertConnectable(config: RedisConnectionConfig): boolean {
+  const useSentinel = hasSentinelNodes(config);
+  if (!useSentinel && !config.url) {
+    throw new Error(
+      "Redis connection must define either `url` or a non-empty `sentinels` list.",
+    );
+  }
+  if (useSentinel && !config.master_name) {
+    throw new Error(
+      "Sentinel connection requires `master_name` (the Sentinel master group name).",
+    );
+  }
+  return useSentinel;
+}
+
+/**
+ * Translate the snake_case connection config into ioredis options.
+ * Only defined values are set so ioredis never receives explicit `undefined`
+ * and standalone option objects stay byte-identical to previous behaviour.
+ */
+function buildRedisOptions(config: RedisConnectionConfig): RedisOptions {
+  const options: RedisOptions = {
+    lazyConnect: true,
+    maxRetriesPerRequest: 2,
+    enableReadyCheck: true,
+    connectTimeout: config.timeout || 5000,
+  };
+
+  if (config.db !== undefined) options.db = config.db;
+  if (config.username) options.username = config.username;
+  if (config.password) options.password = config.password;
+
+  if (hasSentinelNodes(config)) {
+    options.sentinels = (config.sentinels ?? []).map((node) => ({
+      host: node.host,
+      port: node.port ?? DEFAULT_SENTINEL_PORT,
+    }));
+    options.name = config.master_name;
+    options.role = config.role ?? "master";
+    if (config.sentinel_username) {
+      options.sentinelUsername = config.sentinel_username;
+    }
+    if (config.sentinel_password) {
+      options.sentinelPassword = config.sentinel_password;
+    }
+    if (config.sentinel_tls) {
+      options.enableTLSForSentinelMode = true;
+    }
+
+    // Bounded master resolution: returning a non-number makes ioredis throw
+    // "All sentinels are unreachable" instead of retrying indefinitely.
+    options.sentinelRetryStrategy = (attempt: number): number | null =>
+      attempt >= SENTINEL_MAX_ROUNDS ? null : Math.min(attempt * 200, 1000);
+  }
+
+  return options;
+}
 
 export interface RedisKeyInfo {
   key: string;
@@ -21,12 +91,17 @@ export class RedisProvider {
 
   async connect(config: RedisConnectionConfig): Promise<void> {
     this.config = config;
-    this.client = new Redis(config.url, {
-      lazyConnect: true,
-      maxRetriesPerRequest: 2,
-      enableReadyCheck: true,
-      connectTimeout: config.timeout || 5000,
-    });
+
+    const useSentinel = assertConnectable(config);
+    const options = buildRedisOptions(config);
+
+    // Passing the options object (rather than a URL string) is what makes
+    // ioredis construct a SentinelConnector; a URL always yields a standalone
+    // connector.
+    this.client = useSentinel
+      ? new Redis(options)
+      : new Redis(config.url as string, options);
+
     await this.client.connect();
   }
 

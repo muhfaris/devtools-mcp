@@ -1,6 +1,11 @@
 import { getConfigPath } from "../../core/config.js";
 import { getConfigRuntimeState } from "../../core/runtime-config.js";
-import type { Config, ConnectionConfig, Tool } from "../../core/types.js";
+import type {
+  Config,
+  ConnectionConfig,
+  RedisConnectionConfig,
+  Tool,
+} from "../../core/types.js";
 
 const developmentConnectionNames = new Set(["local", "dev", "development"]);
 const sensitiveQueryKeys =
@@ -28,6 +33,52 @@ const showConnection = (name: string, connection: ConnectionConfig) => {
     pool_size: connection.pool_size ?? null,
     timeout: connection.timeout ?? null,
     credentials_exposed: credentialsExposed,
+  };
+};
+
+/** True when the URL itself carries AUTH credentials (redis://user:pass@host). */
+const urlHasCredentials = (url: string | undefined): boolean => {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return Boolean(parsed.username || parsed.password);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Describe a Redis connection without leaking any credential.
+ * Sentinel host:port pairs are safe to show; passwords and usernames never are.
+ */
+const showRedisConnection = (name: string, connection: RedisConnectionConfig) => {
+  const credentialsExposed = developmentConnectionNames.has(name.toLowerCase());
+  const sentinels = connection.sentinels ?? [];
+  const isSentinel = sentinels.length > 0;
+
+  return {
+    mode: isSentinel ? "sentinel" : "standalone",
+    url:
+      connection.url && !isSentinel
+        ? credentialsExposed
+          ? connection.url
+          : sanitizeDsn(connection.url)
+        : null,
+    sentinels: isSentinel
+      ? sentinels.map((node) => `${node.host}:${node.port ?? 26379}`)
+      : [],
+    master_name: isSentinel ? (connection.master_name ?? null) : null,
+    role: isSentinel ? (connection.role ?? "master") : null,
+    sentinel_tls: isSentinel ? Boolean(connection.sentinel_tls) : null,
+    auth_configured:
+      Boolean(connection.password || connection.username) ||
+      urlHasCredentials(connection.url),
+    sentinel_auth_configured: Boolean(
+      connection.sentinel_password || connection.sentinel_username,
+    ),
+    db: connection.db ?? null,
+    readonly: connection.readonly ?? true,
+    timeout: connection.timeout ?? null,
   };
 };
 
@@ -62,7 +113,12 @@ export const getSafeConfigView = (config: Config = {}) => {
       ? {
           enabled: config.providers?.redis?.enabled ?? true,
           default_connection: redis.default_connection ?? null,
-          connections: Object.keys(redis.connections || {}),
+          connections: Object.fromEntries(
+            Object.entries(redis.connections || {}).map(([name, connection]) => [
+              name,
+              showRedisConnection(name, connection),
+            ]),
+          ),
         }
       : null,
     security: {

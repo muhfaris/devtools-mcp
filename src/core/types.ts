@@ -133,8 +133,31 @@ export interface CodegraphConfig {
   exclude: string[];
 }
 
+export interface RedisSentinelNode {
+  host: string;
+  port?: number;
+}
+
+/**
+ * A Redis connection is either standalone (`url`) or sentinel-backed
+ * (`sentinels` + `master_name`). Exactly one of the two must be provided;
+ * this is enforced at connect time by RedisProvider.
+ */
 export interface RedisConnectionConfig {
-  url: string;
+  url?: string;
+  sentinels?: RedisSentinelNode[];
+  /** Sentinel master group name. Required when `sentinels` is set. */
+  master_name?: string;
+  /** Which node to resolve. Defaults to "master". */
+  role?: "master" | "slave";
+  sentinel_username?: string;
+  sentinel_password?: string;
+  /** Enable TLS when talking to the sentinels themselves. */
+  sentinel_tls?: boolean;
+  /** AUTH username for the data node (Redis 6+). */
+  username?: string;
+  /** AUTH password for the data node. */
+  password?: string;
   readonly?: boolean;
   db?: number;
   timeout?: number;

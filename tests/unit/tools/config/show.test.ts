@@ -95,4 +95,69 @@ describe("show_config", () => {
       result.database.connections["dev-production"].credentials_exposed,
     ).toBe(false);
   });
+
+  it("describes standalone and sentinel Redis connections without secrets", async () => {
+    (global as any).__devtools_config = {
+      providers: {
+        redis: {
+          enabled: true,
+          default_connection: "sentinel-dev",
+          connections: {
+            dev: {
+              url: "redis://:dev-secret@localhost:6379/2",
+              db: 2,
+              readonly: true,
+              timeout: 5000,
+            },
+            "sentinel-prod": {
+              sentinels: [
+                { host: "10.0.0.1", port: 26379 },
+                { host: "10.0.0.2" },
+              ],
+              master_name: "mymaster",
+              role: "slave",
+              sentinel_username: "sentinel-user",
+              sentinel_password: "sentinel-pass",
+              password: "data-pass",
+              sentinel_tls: true,
+            },
+          },
+        },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, {});
+    const connections = result.redis.connections;
+
+    expect(connections.dev).toMatchObject({
+      mode: "standalone",
+      url: "redis://:dev-secret@localhost:6379/2",
+      sentinels: [],
+      master_name: null,
+      role: null,
+      db: 2,
+      readonly: true,
+      timeout: 5000,
+      auth_configured: true,
+    });
+
+    expect(connections["sentinel-prod"]).toEqual({
+      mode: "sentinel",
+      url: null,
+      sentinels: ["10.0.0.1:26379", "10.0.0.2:26379"],
+      master_name: "mymaster",
+      role: "slave",
+      sentinel_tls: true,
+      auth_configured: true,
+      sentinel_auth_configured: true,
+      db: null,
+      readonly: true,
+      timeout: null,
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(
+      /sentinel-pass|data-pass|sentinel-user|data-user/,
+    );
+  });
 });
