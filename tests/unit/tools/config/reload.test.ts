@@ -4,6 +4,8 @@ import { ToolError } from "../../../../src/core/errors.js";
 
 vi.mock("../../../../src/core/runtime-config.js", () => ({
   reloadRuntimeConfig: vi.fn(),
+  getConfigRuntimeState: vi.fn(() => ({})),
+  getConfigPath: vi.fn(() => "/path/to/config.yaml"),
 }));
 
 import { reloadRuntimeConfig } from "../../../../src/core/runtime-config.js";

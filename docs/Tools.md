@@ -43,6 +43,9 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `timezone_convert` | Convert timestamp between timezones | `devtools timezone_convert --to "Asia/Jakarta"` |
 | `semver_bump` | Bump semantic version | `devtools semver_bump --version "1.2.3" --bump minor` |
 | `slugify` | Convert string to URL-safe slug | `devtools slugify --text "Hello World!"` |
+| `diff` | Compare two text strings or files without Git | `devtools diff --file1 a.txt --file2 b.txt` |
+| `env_diff` | Compare .env and .env.example for missing/extra keys | `devtools env_diff --envPath .env --examplePath .env.example` |
+| `port_check` | Check TCP port status and identify local listening PID / process | `devtools port_check --port 3000` |
 
 
 ## JSON Tools
@@ -52,6 +55,7 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `json_minify` | Minify/compact JSON | `devtools json_minify --json '{"name":"John"}'` |
 | `json_format` | Pretty-print JSON with indentation | `devtools json_format --json '{"name":"John"}' --indent 2` |
 | `json_validate` | Validate JSON syntax | `devtools json_validate --json '{"name":"John"}'` |
+| `json_to_types` | Generate type definitions from JSON for many languages | `devtools json_to_types --json '{"name":"John"}' --targetLanguage go` |
 
 
 ## GitLab

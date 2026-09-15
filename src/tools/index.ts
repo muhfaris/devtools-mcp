@@ -11,6 +11,9 @@ import { cronParseTool } from "./misc/cron.js";
 import { timezoneConvertTool } from "./misc/timezone.js";
 import { semverBumpTool } from "./misc/semver.js";
 import { slugifyTool } from "./misc/slugify.js";
+import { diffTool } from "./misc/diff.js";
+import { envDiffTool } from "./misc/env-diff.js";
+import { portCheckTool } from "./misc/port-check.js";
 import { getDbSchemaTool } from "./database/schema.js";
 import { executeQueryTool } from "./database/query.js";
 import { explainQueryTool } from "./database/explain.js";
@@ -32,6 +35,7 @@ import {
   jsonMinifyTool,
   jsonFormatTool,
   jsonValidateTool,
+  jsonToTypesTool,
 } from "./json/index.js";
 import { redisInfoTool } from "./redis/info.js";
 import { redisListKeysTool } from "./redis/list-keys.js";
@@ -66,6 +70,9 @@ export const registerAllTools = async (
   registry.register(timezoneConvertTool);
   registry.register(semverBumpTool);
   registry.register(slugifyTool);
+  registry.register(diffTool);
+  registry.register(envDiffTool);
+  registry.register(portCheckTool);
   registry.register(gitlabListMrsTool);
   registry.register(gitlabGetMrTool);
   registry.register(gitlabCreateNoteTool);
@@ -86,6 +93,7 @@ export const registerAllTools = async (
   registry.register(jsonMinifyTool);
   registry.register(jsonFormatTool);
   registry.register(jsonValidateTool);
+  registry.register(jsonToTypesTool);
   registry.register(redisInfoTool);
   registry.register(redisListKeysTool);
   registry.register(redisGetKeyTool);
