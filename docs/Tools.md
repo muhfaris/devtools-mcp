@@ -107,6 +107,7 @@ connect, so failovers are transparent to all of the tools above. See
 | `gitlab_set_config` | Set GitLab config for the session |
 | `database_set_connection` | Set a DB connection for the session |
 | `providers_info` | Show safe database, GitLab, and Redis configuration; use `live: true` to check database health |
+| `config_init` | Create a starter `.devtools/config.yaml` with database/GitLab/Redis connections; refuses to overwrite an existing config |
 
 `providers_info` is config-only by default. With `live: true`, it connects only to configured database connections and reports their health. GitLab is never contacted and reports only `enabled` and `token_configured`; Redis reports safe connection metadata. Credentials and raw DSNs are never returned.
 
