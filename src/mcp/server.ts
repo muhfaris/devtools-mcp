@@ -1,30 +1,25 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ToolRegistry } from "../core/registry.js";
 import type { ToolParamSchema } from "../core/types.js";
 import { stringifyToolError } from "../core/errors.js";
 import { z } from "zod";
 
-const jsonPrimitiveSchema = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-]);
-
 // Arbitrary JSON value for array/object items. Avoid a recursive union
 // (z.lazy): zod-to-json-schema emits nested $ref pointers that OpenAI's
-// function-schema validator rejects. Must be a fully self-contained fresh
-// union (no shared sub-schemas): any constant reused here gets deduped into
-// a nested $ref, which OpenAI rejects ("reference can only point to
-// definitions defined at the top level of the schema").
-const jsonValueSchema: z.ZodTypeAny = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-  z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
-]);
+// function-schema validator rejects. Must be created FRESH per param:
+// any schema instance reused across tools (shared constant) gets deduped
+// into a $ref that may resolve in a DIFFERENT tool's schema, which OpenAI
+// rejects ("reference can only point to definitions defined at the top
+// level of the schema").
+const makeJsonValueSchema = (): z.ZodTypeAny =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  ]);
 
 export const createToolParamSchema = (param: ToolParamSchema): z.ZodTypeAny => {
   let schema: z.ZodTypeAny;
@@ -43,12 +38,14 @@ export const createToolParamSchema = (param: ToolParamSchema): z.ZodTypeAny => {
       schema = z.array(
         param.items && "type" in param.items
           ? createToolParamSchema(param.items as ToolParamSchema)
-          : jsonValueSchema,
+          : makeJsonValueSchema(),
       );
       break;
     case "object":
-      schema = z.record(jsonValueSchema);
+      schema = z.record(makeJsonValueSchema());
       break;
+    default:
+      schema = makeJsonValueSchema();
   }
 
   if (param.description) schema = schema.describe(param.description);
