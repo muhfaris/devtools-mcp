@@ -109,10 +109,12 @@ describe("providers_info", () => {
     "does not create database providers when live checking is disabled",
     async (params) => {
       (global as any).__devtools_config = {
-        database: {
-          default_engine: "mysql",
-          connections: {
-            dev: { dsn: "mysql://localhost/dev" },
+        providers: {
+          database: {
+            default_engine: "mysql",
+            connections: {
+              dev: { dsn: "mysql://localhost/dev" },
+            },
           },
         },
       };
@@ -128,11 +130,13 @@ describe("providers_info", () => {
     const second = provider({ healthCheck: vi.fn().mockResolvedValue(false) });
     mockedCreateProvider.mockReturnValueOnce(first as any).mockReturnValueOnce(second as any);
     (global as any).__devtools_config = {
-      database: {
-        default_engine: "postgresql",
-        connections: {
-          first: { dsn: "postgresql://localhost/first_db" },
-          second: { dsn: "postgresql://localhost/second_db" },
+      providers: {
+        database: {
+          default_engine: "postgresql",
+          connections: {
+            first: { dsn: "postgresql://localhost/first_db" },
+            second: { dsn: "postgresql://localhost/second_db" },
+          },
         },
       },
     };
@@ -163,10 +167,12 @@ describe("providers_info", () => {
       });
       mockedCreateProvider.mockReturnValue(failing as any);
       (global as any).__devtools_config = {
-        database: {
-          default_engine: "mariadb",
-          connections: {
-            dev: { dsn: "mariadb://localhost/app" },
+        providers: {
+          database: {
+            default_engine: "mariadb",
+            connections: {
+              dev: { dsn: "mariadb://localhost/app" },
+            },
           },
         },
       };

@@ -60,10 +60,9 @@ describe("show_config", () => {
       allow_write: true,
       blocked_env: ["production"],
     });
-    expect(result.security).toEqual({ allow_write: true, blocked_env: ["production"] });
   });
 
-  it("echoes an unset shared block and the per-provider default", async () => {
+  it("reports the per-provider default when nothing grants writes", async () => {
     (global as any).__devtools_config = {
       providers: {
         redis: { enabled: true, connections: { dev: { url: "redis://localhost" } } },
@@ -72,7 +71,6 @@ describe("show_config", () => {
 
     const result = await parseToolJson(showConfigTool, {});
 
-    expect(result.security).toEqual({ allow_write: null, blocked_env: null });
     expect(result.redis.security).toEqual({
       allow_write: false,
       blocked_env: ["production", "prod"],
@@ -83,11 +81,13 @@ describe("show_config", () => {
     "recognizes %s as a development connection",
     async (name) => {
       (global as any).__devtools_config = {
-        database: {
-          default_engine: "postgresql",
-          connections: {
-            [name]: {
-              dsn: "postgresql://user:pass@localhost/app",
+        providers: {
+          database: {
+            default_engine: "postgresql",
+            connections: {
+              [name]: {
+                dsn: "postgresql://user:pass@localhost/app",
+              },
             },
           },
         },
@@ -100,11 +100,13 @@ describe("show_config", () => {
 
   it("does not treat prefixed names as development", async () => {
     (global as any).__devtools_config = {
-      database: {
-        default_engine: "postgresql",
-        connections: {
-          "dev-production": {
-            dsn: "postgresql://user:pass@host/app",
+      providers: {
+        database: {
+          default_engine: "postgresql",
+          connections: {
+            "dev-production": {
+              dsn: "postgresql://user:pass@host/app",
+            },
           },
         },
       },

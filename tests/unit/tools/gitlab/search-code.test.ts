@@ -23,10 +23,12 @@ describe("gitlab_search_code and pattern grep", () => {
     ];
 
     (global as any).__devtools_config = {
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "token",
-        projectId: "group/project",
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.com",
+          token: "token",
+          projectId: "group/project",
+        },
       },
     };
 
@@ -65,10 +67,12 @@ func (s *Service) UpdateDeadline() {}
     });
 
     (global as any).__devtools_config = {
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "token",
-        projectId: "group/project",
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.com",
+          token: "token",
+          projectId: "group/project",
+        },
       },
     };
 

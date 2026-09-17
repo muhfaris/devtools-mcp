@@ -1,6 +1,7 @@
 import { Gitlab } from "@gitbeaker/rest";
 import { ToolError } from "../core/errors.js";
 import type { Config } from "../core/types.js";
+import { getProviderConfig } from "../core/provider-config.js";
 
 let gitlabClient: Gitlab | null = null;
 let projectId: string | number | null = null;
@@ -12,7 +13,7 @@ let projectId: string | number | null = null;
 let clientFingerprint: string | null = null;
 
 const gitlabConfig = (config: Config | undefined) =>
-  config?.providers?.gitlab ?? config?.gitlab;
+  getProviderConfig(config, "gitlab");
 
 /**
  * Value-based identity of a GitLab config. `projectId` is included so the module-level
@@ -72,14 +73,14 @@ export const parseGitLabUrl = (input: string): ParsedGitLabUrl => {
 };
 
 export const initGitLab = (config: Config) => {
-  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  const gitlab = getProviderConfig(config, "gitlab");
   if (!gitlab) {
     throw new ToolError(
       "CONFIG_REQUIRED",
       "GitLab configuration is required.",
       "Configure GitLab with gitlab_set_config, then retry this tool.",
       true,
-      { configKey: "gitlab", setupTool: "gitlab_set_config" },
+      { configKey: "providers.gitlab", setupTool: "gitlab_set_config" },
     );
   }
 
@@ -90,7 +91,7 @@ export const initGitLab = (config: Config) => {
       "A GitLab access token is required.",
       "Ask the user to configure a GitLab access token with gitlab_set_config, then retry this tool.",
       true,
-      { configKey: "gitlab.token", setupTool: "gitlab_set_config" },
+      { configKey: "providers.gitlab.token", setupTool: "gitlab_set_config" },
     );
   }
 
@@ -148,7 +149,7 @@ const createProjectIdRequiredError = () =>
     "GitLab project identifier is required.",
     "Ask the user for the GitLab MR URL (e.g. https://gitlab.example.com/group/repo/-/merge_requests/123), project path (e.g. group/repo), or numeric project ID, then retry this tool with mr_url or project_id. Do not switch to local Git.",
     true,
-    { parameter: "project_id", configKey: "gitlab.projectId" },
+    { parameter: "project_id", configKey: "providers.gitlab.projectId" },
   );
 
 export const resolveProjectId = (
@@ -169,8 +170,7 @@ export const resolveProjectId = (
 
   const id =
     params.project_id ??
-    config.providers?.gitlab?.projectId ??
-    config.gitlab?.projectId;
+    getProviderConfig(config, "gitlab")?.projectId;
   if (id === undefined || id === null || id === "") {
     throw createProjectIdRequiredError();
   }
@@ -244,14 +244,14 @@ export const resolveMrId = (params: Record<string, unknown>): number => {
 };
 
 export const getGitLabConfig = (config: Config) => {
-  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  const gitlab = getProviderConfig(config, "gitlab");
   if (!gitlab) {
     throw new ToolError(
       "CONFIG_REQUIRED",
       "GitLab configuration is required.",
       "Configure GitLab with gitlab_set_config, then retry this tool.",
       true,
-      { configKey: "gitlab", setupTool: "gitlab_set_config" },
+      { configKey: "providers.gitlab", setupTool: "gitlab_set_config" },
     );
   }
   return gitlab;
@@ -261,7 +261,7 @@ export const getGitLabWebUrl = (
   config: Config,
   resolvedProjectId: string | number,
 ) => {
-  const gitlab = config.providers?.gitlab ?? config.gitlab;
+  const gitlab = getProviderConfig(config, "gitlab");
   const host = (gitlab?.url || "https://gitlab.com").replace(/\/+$/, "");
   return `${host}/${resolvedProjectId}`;
 };

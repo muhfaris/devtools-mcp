@@ -20,10 +20,12 @@ describe("gitlab_create_note", () => {
 
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.example.org",
-        token: "token",
-        projectId: 100,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.org",
+          token: "token",
+          projectId: 100,
+        },
       },
     };
 
@@ -46,10 +48,12 @@ describe("gitlab_create_note", () => {
   it("throws INVALID_ARGUMENT when body is empty", async () => {
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.com",
-        token: "token",
-        projectId: 100,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.com",
+          token: "token",
+          projectId: 100,
+        },
       },
     };
 
@@ -64,9 +68,11 @@ describe("gitlab_create_note", () => {
   it("rejects conflicting mr_id and mr_url before creating a note", async () => {
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "token",
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.com",
+          token: "token",
+        },
       },
     };
 
@@ -104,10 +110,12 @@ describe("gitlab_create_note", () => {
   ])("rejects invalid inline arguments %o", async (inlineParams, parameter) => {
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.com",
-        token: "token",
-        projectId: 100,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.com",
+          token: "token",
+          projectId: 100,
+        },
       },
     };
 
@@ -149,10 +157,12 @@ describe("gitlab_create_note", () => {
 
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.com",
-        token: "token",
-        projectId: 100,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.com",
+          token: "token",
+          projectId: 100,
+        },
       },
     };
 
@@ -225,10 +235,12 @@ describe("gitlab_create_note", () => {
     );
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: {
-        url: "https://gitlab.com",
-        token: "token",
-        projectId: 100,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.com",
+          token: "token",
+          projectId: 100,
+        },
       },
     };
 
@@ -285,7 +297,9 @@ describe("gitlab_create_note", () => {
   ])("rejects %s before creating a note", async (_name, inlineParams, parameter) => {
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      providers: {
+        gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
     gitlabMod.initGitLab((global as any).__devtools_config);
@@ -335,7 +349,9 @@ describe("gitlab_create_note", () => {
     );
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      providers: {
+        gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
     gitlabMod.initGitLab((global as any).__devtools_config);
@@ -385,7 +401,9 @@ describe("gitlab_create_note", () => {
     );
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      providers: {
+        gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
     gitlabMod.initGitLab((global as any).__devtools_config);
@@ -430,7 +448,9 @@ describe("gitlab_create_note", () => {
   it("rejects an inline response without position metadata", async () => {
     (global as any).__devtools_config = {
       security: { allow_write: true },
-      gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      providers: {
+        gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
+      },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
     gitlabMod.initGitLab((global as any).__devtools_config);

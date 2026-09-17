@@ -13,10 +13,6 @@ const config = (value: unknown): Config => value as Config;
 
 const PROVIDERS = ["database", "gitlab", "redis"] as const;
 
-/** The deprecated shared location, honoured for one release. */
-const legacy = (execute_query: Record<string, unknown>) =>
-  ({ security: { execute_query } }) as unknown as Config;
-
 const providerScoped = (provider: string, security: Record<string, unknown>) =>
   config({ providers: { [provider]: { security } } });
 
@@ -70,24 +66,6 @@ describe("resolveAllowWrite", () => {
     },
   );
 
-  it.each(PROVIDERS)(
-    "honours the deprecated security.execute_query.allow_write alias for %s",
-    (provider) => {
-      expect(resolveAllowWrite(legacy({ allow_write: true }), provider)).toBe(true);
-      expect(resolveAllowWrite(legacy({ allow_write: false }), provider)).toBe(false);
-    },
-  );
-
-  it.each(PROVIDERS)(
-    "prefers the shared block over the deprecated alias for %s",
-    (provider) => {
-      const both = config({
-        security: { allow_write: false, execute_query: { allow_write: true } },
-      });
-      expect(resolveAllowWrite(both, provider)).toBe(false);
-    },
-  );
-
   it.each(PROVIDERS)("treats a null value as absent for %s", (provider) => {
     const nulled = config({
       security: { allow_write: true },
@@ -118,11 +96,6 @@ describe("resolveBlockedEnvs", () => {
     },
   );
 
-  it.each(PROVIDERS)("honours the deprecated alias for %s", (provider) => {
-    expect(resolveBlockedEnvs(legacy({ blocked_env: ["staging"] }), provider)).toEqual([
-      "staging",
-    ]);
-  });
 });
 
 describe("resolveSecurity", () => {

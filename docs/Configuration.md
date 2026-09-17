@@ -163,19 +163,18 @@ never triggers GitLab, database, or Redis setup.
 
 ## Value precedence
 
-Because `providers.*` was introduced after the original top-level keys, every
-lookup falls back to the legacy location. The exact expressions in code are:
+Every provider is read from `providers.<provider>`. The only fallback left is within
+the security keys themselves, where a provider-scoped block overrides the shared one.
+The exact expressions in code are:
 
 | Value | Resolution chain | Default |
 | :--- | :--- | :--- |
-| Database config | `providers.database` ?? `database` | — |
-| Database engine | `database.default_engine` | `postgresql` |
+| Database / GitLab / Redis config | `providers.<provider>` — no top-level fallback | — |
+| Database engine | `providers.database.default_engine` | `postgresql` |
 | Provider enabled | `providers.<provider>.enabled` | enabled unless `false` |
-| Write gate (any provider) | `providers.<provider>.security.allow_write` ?? `security.allow_write` ?? `security.execute_query.allow_write` ?? `false` | `false` |
-| Blocked identifiers (any provider) | `providers.<provider>.security.blocked_env` ?? `security.blocked_env` ?? `security.execute_query.blocked_env` ?? `[production, prod]` | `[production, prod]` |
-| GitLab config | `providers.gitlab` ?? `gitlab` | — |
-| GitLab project | `params.project_id` ?? `providers.gitlab.projectId` ?? `gitlab.projectId` | — |
-| Redis config | `providers.redis` ?? `redis` | — |
+| Write gate (any provider) | `providers.<provider>.security.allow_write` ?? `security.allow_write` ?? `false` | `false` |
+| Blocked identifiers (any provider) | `providers.<provider>.security.blocked_env` ?? `security.blocked_env` ?? `[production, prod]` | `[production, prod]` |
+| GitLab project | `params.project_id` ?? `providers.gitlab.projectId` | — |
 
 Both security keys resolve through **one chain, for every provider**:
 
@@ -185,26 +184,12 @@ Both security keys resolve through **one chain, for every provider**:
   ever block more, never less.
 - `allow_write` is a *grant*, so it is denied when nothing sets it. A missing or
   misspelled block fails closed.
-- `security.execute_query.*` is the deprecated spelling of `security.*`. It is still
-  honoured for one release and never overrides the newer keys.
+- `security.execute_query.*` was the older home of these keys. It is **gone** — not
+  deprecated, not aliased. Move the block up to `security.*`.
 
-Legacy top-level shape (still honoured, now deprecated):
-
-```yaml
-database:
-  default_engine: postgresql
-  connections: { dev: { dsn: ${DEV_DATABASE_URL} } }
-security:
-  allow_write: true
-  blocked_env: [production, prod]
-gitlab:
-  url: https://gitlab.com
-  token: ${GITLAB_TOKEN}
-  projectId: 12345
-redis:
-  default_connection: dev
-  connections: { dev: { url: ${REDIS_URL} } }
-```
+A top-level `database`, `gitlab`, or `redis` block is **ignored**. It is not a legacy
+spelling: the only place a provider is read from is `providers.<provider>`, so a
+misplaced block leaves that provider unconfigured rather than half-working.
 
 ## Security model
 
@@ -244,10 +229,11 @@ allowed) and a **grant** for the database. It is now a grant everywhere, and
 | :--- | :--- |
 | `providers.{gitlab,redis}.security.allow_write: false` (opt-out) | `security.allow_write: true` (opt-in). GitLab and Redis writes are **blocked** until a config grants them |
 | `providers.database.security.allow_write: true` | unchanged |
-| `security.execute_query.{allow_write,blocked_env}` | `security.{allow_write,blocked_env}` — the old path still works for one release |
+| `security.execute_query.{allow_write,blocked_env}` | `security.{allow_write,blocked_env}` — the old path is **removed**, not aliased |
 | `redis.connections.<name>.readonly: false` (allowed writes) | `security.allow_write: true`, and keep the connection out of `blocked_env` |
 | `redis.connections.<name>.readonly: true` (blocked writes) | add the connection name to `blocked_env` |
 | `database.connections.<name>.readonly` | ignored before, removed now — it never gated anything |
+| top-level `database` / `gitlab` / `redis` | ignored — move the block under `providers:` |
 | `providers.gitlab.security.blocked_env: []` | GitLab now inherits the shared list, so path matching applies unless you override it |
 
 Because a newly added connection is writable as soon as its provider is granted,
@@ -322,7 +308,7 @@ Known limits:
 - The scaffolded file therefore denies every write tool. Set `allow_write: true`
   in the shared block, or in one provider's block, to enable them.
 - No connection carries a `readonly` flag: that key is gone.
-- `codegraph` and the legacy top-level keys are never emitted.
+- `codegraph` is never emitted, and no legacy top-level keys exist to emit.
 - It refuses to run when `.devtools/config.yaml` already exists.
 
 ## Source of truth

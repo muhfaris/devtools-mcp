@@ -298,29 +298,32 @@ Example `.devtools/config.yaml` configurations:
 
 ```yaml
 # PostgreSQL
-database:
-  default_engine: postgresql
-  connections:
-    local:
-      dsn: postgresql://devuser:secret@localhost:5432/app_db
+providers:
+  database:
+    default_engine: postgresql
+    connections:
+      local:
+        dsn: postgresql://devuser:secret@localhost:5432/app_db
 ```
 
 ```yaml
 # MySQL
-database:
-  default_engine: mysql
-  connections:
-    local:
-      dsn: mysql://devuser:secret@localhost:3306/app_db
+providers:
+  database:
+    default_engine: mysql
+    connections:
+      local:
+        dsn: mysql://devuser:secret@localhost:3306/app_db
 ```
 
 ```yaml
 # MariaDB (uses the MySQL-compatible provider)
-database:
-  default_engine: mariadb
-  connections:
-    local:
-      dsn: mariadb://devuser:secret@localhost:3306/app_db
+providers:
+  database:
+    default_engine: mariadb
+    connections:
+      local:
+        dsn: mariadb://devuser:secret@localhost:3306/app_db
 ```
 
 Percent-encode reserved characters in credentials. For example, the password

@@ -25,10 +25,12 @@ describe("gitlab_get_commits", () => {
     ];
 
     (global as any).__devtools_config = {
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "token",
-        projectId: "group/project",
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.com",
+          token: "token",
+          projectId: "group/project",
+        },
       },
     };
 

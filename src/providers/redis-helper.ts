@@ -1,13 +1,13 @@
 import type { Config } from "../core/types.js";
 import { RedisProvider } from "./redis.js";
+import { getProviderConfig } from "../core/provider-config.js";
 import {
   findBlockedEnvironment,
   isProviderEnabled,
   resolveAllowWrite,
 } from "../core/security.js";
 
-const getRedisConfig = (config: Config) =>
-  config.providers?.redis ?? config.redis;
+const getRedisConfig = (config: Config) => getProviderConfig(config, "redis");
 
 const assertEnabled = (config: Config) => {
   if (!isProviderEnabled(config, "redis")) {

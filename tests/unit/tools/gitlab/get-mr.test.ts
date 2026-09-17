@@ -20,9 +20,11 @@ describe("gitlab_get_mr", () => {
     const mockShowChanges = vi.fn().mockResolvedValue({ changes: [] });
 
     (global as any).__devtools_config = {
-      gitlab: {
-        url: "https://gitlab.example.com",
-        token: "token",
+      providers: {
+        gitlab: {
+          url: "https://gitlab.example.com",
+          token: "token",
+        },
       },
     };
 

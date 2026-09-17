@@ -7,6 +7,7 @@ import type {
   Tool,
 } from "../../core/types.js";
 import { isProviderEnabled, resolveSecurity } from "../../core/security.js";
+import { getProviderConfig } from "../../core/provider-config.js";
 
 const developmentConnectionNames = new Set(["local", "dev", "development"]);
 const sensitiveQueryKeys =
@@ -82,9 +83,9 @@ const showRedisConnection = (name: string, connection: RedisConnectionConfig) =>
 };
 
 export const getSafeConfigView = (config: Config = {}) => {
-  const db = config.providers?.database ?? config.database;
-  const gitlab = config.providers?.gitlab ?? config.gitlab;
-  const redis = config.providers?.redis ?? config.redis;
+  const db = getProviderConfig(config, "database");
+  const gitlab = getProviderConfig(config, "gitlab");
+  const redis = getProviderConfig(config, "redis");
   return {
     config_path: getConfigPath(),
     runtime: getConfigRuntimeState(),
@@ -126,15 +127,6 @@ export const getSafeConfigView = (config: Config = {}) => {
           ),
         }
       : null,
-    // The shared layer, echoed so it is visible whether it was set at all. Each
-    // provider reports its own resolved policy above.
-    security: {
-      allow_write: config.security?.allow_write ?? null,
-      blocked_env: config.security?.blocked_env ?? null,
-      ...(config.security?.execute_query
-        ? { deprecated_execute_query: config.security.execute_query }
-        : {}),
-    },
   };
 };
 

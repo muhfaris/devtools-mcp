@@ -1,11 +1,11 @@
 import { ToolError } from "../../core/errors.js";
+import { getProviderConfig } from "../../core/provider-config.js";
 
 export const requireDatabaseConnection = (
   config: any,
   requestedConnection?: unknown,
 ) => {
-  const connections =
-    config?.providers?.database?.connections ?? config?.database?.connections;
+  const connections = getProviderConfig(config, "database")?.connections;
   if (!connections || Object.keys(connections).length === 0) {
     throw new ToolError(
       "DATABASE_CONNECTION_REQUIRED",
@@ -13,7 +13,7 @@ export const requireDatabaseConnection = (
       "Ask the user to configure a database connection with database_set_connection, then retry this tool.",
       true,
       {
-        configKey: "database.connections",
+        configKey: "providers.database.connections",
         setupTool: "database_set_connection",
       },
     );

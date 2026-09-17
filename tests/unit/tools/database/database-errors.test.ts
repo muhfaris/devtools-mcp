@@ -27,10 +27,12 @@ describe("database tools error recovery", () => {
 
   it("throws DATABASE_CONNECTION_NOT_FOUND with available_values for invalid connection name", async () => {
     (global as any).__devtools_config = {
-      database: {
-        connections: {
-          dev: { dsn: "postgresql://localhost/dev", readonly: true },
-          staging: { dsn: "postgresql://localhost/staging", readonly: true },
+      providers: {
+        database: {
+          connections: {
+            dev: { dsn: "postgresql://localhost/dev", readonly: true },
+            staging: { dsn: "postgresql://localhost/staging", readonly: true },
+          },
         },
       },
     };
@@ -50,9 +52,11 @@ describe("database tools error recovery", () => {
 
   it("throws DATABASE_QUERY_REQUIRED when query is empty or blank", async () => {
     (global as any).__devtools_config = {
-      database: {
-        connections: {
-          dev: { dsn: "postgresql://localhost/dev", readonly: true },
+      providers: {
+        database: {
+          connections: {
+            dev: { dsn: "postgresql://localhost/dev", readonly: true },
+          },
         },
       },
     };
@@ -68,9 +72,11 @@ describe("database tools error recovery", () => {
 
   it("throws DATABASE_WRITE_DISABLED for non-SELECT queries when allow_write is false", async () => {
     (global as any).__devtools_config = {
-      database: {
-        connections: {
-          dev: { dsn: "postgresql://localhost/dev", readonly: false },
+      providers: {
+        database: {
+          connections: {
+            dev: { dsn: "postgresql://localhost/dev", readonly: false },
+          },
         },
       },
       security: {

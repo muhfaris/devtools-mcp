@@ -23,12 +23,14 @@ afterEach(() => {
 describe("reload_config", () => {
   it("returns the newly loaded safe configuration in success envelope", async () => {
     mockReload.mockResolvedValue({
-      database: {
-        default_engine: "mysql",
-        connections: {
-          staging: {
-            dsn: "mysql://user:secret@db.example.com/app",
-            readonly: true,
+      providers: {
+        database: {
+          default_engine: "mysql",
+          connections: {
+            staging: {
+              dsn: "mysql://user:secret@db.example.com/app",
+              readonly: true,
+            },
           },
         },
       },

@@ -48,9 +48,11 @@ vi.mock("../../../../src/providers/redis.js", () => {
 describe("redis tools", () => {
   beforeEach(() => {
     (global as any).__devtools_config = {
-      redis: {
-        connections: {
-          dev: { url: "redis://localhost:6379", readonly: true },
+      providers: {
+        redis: {
+          connections: {
+            dev: { url: "redis://localhost:6379", readonly: true },
+          },
         },
       },
     };

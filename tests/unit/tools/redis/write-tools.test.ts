@@ -51,10 +51,11 @@ describe("redis write tools", () => {
       );
     });
 
-    it("denies writes on a legacy top-level redis block too", async () => {
+    it("ignores a top-level redis block", async () => {
       useConfig({ redis: { connections: { dev: devConnection } } });
+      // The block is not merely ungranted: it is invisible, so the connection is missing.
       await expect(redisSetKeyTool.execute({ key: "k", value: "v" })).rejects.toThrow(
-        "Redis writes are disabled",
+        "No Redis connections configured",
       );
     });
 
@@ -84,15 +85,6 @@ describe("redis write tools", () => {
       await expect(redisSetKeyTool.execute({ key: "k", value: "v" })).rejects.toThrow(
         "Redis writes are disabled",
       );
-    });
-
-    it("still honours the deprecated security.execute_query.allow_write alias", async () => {
-      useConfig({
-        redis: { connections: { dev: devConnection } },
-        security: { execute_query: { allow_write: true } },
-      });
-      expect(parseText(await redisSetKeyTool.execute({ key: "user:1", value: "A" })).set)
-        .toBe(true);
     });
 
     it("blocks a connection listed in the provider-scoped blocked_env", async () => {

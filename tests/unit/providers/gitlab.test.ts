@@ -52,7 +52,7 @@ describe("providers/gitlab", () => {
 
   describe("resolveProjectId", () => {
     it("extracts project path from mr_url parameter", () => {
-      const config = { gitlab: { url: "https://gitlab.com", token: "token" } };
+      const config = { providers: { gitlab: { url: "https://gitlab.com", token: "token" } } };
       const id = resolveProjectId(
         { mr_url: "https://gitlab.example.com/group/project/-/merge_requests/1227" },
         config as any,
@@ -61,19 +61,19 @@ describe("providers/gitlab", () => {
     });
 
     it("accepts string path with namespace directly in project_id", () => {
-      const config = { gitlab: { url: "https://gitlab.com", token: "token" } };
+      const config = { providers: { gitlab: { url: "https://gitlab.com", token: "token" } } };
       expect(resolveProjectId({ project_id: "/group/project/" }, config as any)).toBe(
         "group/project",
       );
     });
 
     it("accepts numeric project ID", () => {
-      const config = { gitlab: { url: "https://gitlab.com", token: "token" } };
+      const config = { providers: { gitlab: { url: "https://gitlab.com", token: "token" } } };
       expect(resolveProjectId({ project_id: 774 }, config as any)).toBe(774);
     });
 
     it("throws GITLAB_PROJECT_ID_REQUIRED with helpful URL instructions", () => {
-      const config = { gitlab: { url: "https://gitlab.com", token: "token" } };
+      const config = { providers: { gitlab: { url: "https://gitlab.com", token: "token" } } };
       expect(() => resolveProjectId({}, config as any)).toThrowError(ToolError);
 
       try {
@@ -144,7 +144,7 @@ describe("providers/gitlab", () => {
   });
 
   it("constructs correct web URLs respecting custom hosts and slug project IDs", () => {
-    const config = { gitlab: { url: "https://gitlab.example.com/", token: "xxx" } };
+    const config = { providers: { gitlab: { url: "https://gitlab.example.com/", token: "xxx" } } };
     expect(getGitLabWebUrl(config as any, "group/project")).toBe(
       "https://gitlab.example.com/group/project",
     );
@@ -196,19 +196,16 @@ describe("providers/gitlab", () => {
       expect(second).not.toBe(first);
     });
 
-    it("reads the legacy top-level config too", () => {
+    it("ignores a legacy top-level gitlab block", () => {
       useConfig({ gitlab: { url: "https://gitlab.com", token: "token-a" } });
-      const first = getGitLabClient();
 
-      useConfig({ gitlab: { url: "https://gitlab.com", token: "token-b" } });
-
-      expect(getGitLabClient()).not.toBe(first);
+      expect(() => getGitLabClient()).toThrowError(ToolError);
     });
 
     it("picks up a token supplied at runtime by gitlab_set_config", async () => {
       // Mirrors the real flow: the config holds a placeholder that resolved to an
       // empty string, so the token arrives later through the MCP tool.
-      useConfig({ gitlab: { url: "https://gitlab.com", token: "" } });
+      useConfig({ providers: { gitlab: { url: "https://gitlab.com", token: "" } } });
       expect(() => getGitLabClient()).toThrowError(ToolError);
 
       await gitlabSetConfigTool.execute({ token: "glpat-from-mcp" });

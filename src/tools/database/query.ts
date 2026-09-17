@@ -3,8 +3,10 @@ import { createProvider } from "../../providers/index.js";
 import { ToolError } from "../../core/errors.js";
 import {
   findBlockedEnvironment,
+  isProviderEnabled,
   resolveAllowWrite,
 } from "../../core/security.js";
+import { getProviderConfig } from "../../core/provider-config.js";
 import {
   databaseRequestError,
   requireDatabaseConnection,
@@ -43,8 +45,8 @@ export const executeQueryTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    const db = config?.providers?.database ?? config?.database;
-    if (config?.providers?.database?.enabled === false) {
+    const db = getProviderConfig(config, "database");
+    if (!isProviderEnabled(config, "database")) {
       throw new ToolError(
         "DATABASE_DISABLED",
         "Database provider is disabled in configuration.",

@@ -1,5 +1,7 @@
 import { Tool } from "../../core/types.js";
 import { createProvider, type DBProvider } from "../../providers/index.js";
+import { getProviderConfig } from "../../core/provider-config.js";
+import { isProviderEnabled } from "../../core/security.js";
 import { databaseRequestError, requireDatabaseConnection } from "./errors.js";
 
 // Cache for schema introspection (per connection, TTL 60s)
@@ -32,7 +34,7 @@ export const getDbSchemaTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (config?.providers?.database?.enabled === false) {
+    if (!isProviderEnabled(config, "database")) {
       throw new Error(
         "Database provider is disabled in configuration. Enable providers.database.enabled in .devtools/config.yaml.",
       );
@@ -41,8 +43,7 @@ export const getDbSchemaTool: Tool = {
       requireDatabaseConnection(config, params.connection);
 
     const engine =
-      config.providers?.database?.default_engine ??
-      (config.database?.default_engine || "postgresql");
+      getProviderConfig(config, "database")?.default_engine ?? "postgresql";
     const provider = createProvider(engine);
 
     const cacheKey = `${connectionName}:${params.table || "all"}`;

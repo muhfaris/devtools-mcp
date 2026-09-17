@@ -1,5 +1,6 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
+import { isProviderConfigured } from "../../core/provider-config.js";
 import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
 
@@ -60,13 +61,13 @@ export const gitlabGetFileTool: Tool = {
         { configKey: "providers.gitlab.enabled" },
       );
     }
-    if (!config?.providers?.gitlab && !config?.gitlab) {
+    if (!isProviderConfigured(config, "gitlab")) {
       throw new ToolError(
         "CONFIG_REQUIRED",
         "GitLab configuration is required.",
         "Configure GitLab with gitlab_set_config, then retry this tool.",
         true,
-        { configKey: "gitlab", setupTool: "gitlab_set_config" },
+        { configKey: "providers.gitlab", setupTool: "gitlab_set_config" },
       );
     }
 

@@ -1,5 +1,7 @@
 import type { Config, ConnectionConfig, Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
+import { getProviderConfig } from "../../core/provider-config.js";
+import { isProviderEnabled } from "../../core/security.js";
 import { getSafeConfigView } from "../config/show.js";
 
 const configuredDatabase = (connection: ConnectionConfig): string | null => {
@@ -26,8 +28,8 @@ export const providersInfoTool: Tool = {
   execute: async (params) => {
     const config: Config = (global as any).__devtools_config || {};
     const safeConfig = getSafeConfigView(config);
-    const databaseConfig = config.providers?.database ?? config.database;
-    const databaseEnabled = config.providers?.database?.enabled ?? true;
+    const databaseConfig = getProviderConfig(config, "database");
+    const databaseEnabled = isProviderEnabled(config, "database");
     const engine = databaseConfig?.default_engine ?? null;
 
     const connections = await Promise.all(

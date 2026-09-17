@@ -1,5 +1,7 @@
 import { Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
+import { getProviderConfig } from "../../core/provider-config.js";
+import { isProviderEnabled } from "../../core/security.js";
 import {
   databaseRequestError,
   requireDatabaseConnection,
@@ -29,7 +31,7 @@ export const explainQueryTool: Tool = {
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config;
-    if (config?.providers?.database?.enabled === false) {
+    if (!isProviderEnabled(config, "database")) {
       throw new Error(
         "Database provider is disabled in configuration. Enable providers.database.enabled in .devtools/config.yaml.",
       );
@@ -40,8 +42,7 @@ export const explainQueryTool: Tool = {
     const query = requireQuery(params.query);
 
     const engine =
-      config.providers?.database?.default_engine ??
-      (config.database?.default_engine || "postgresql");
+      getProviderConfig(config, "database")?.default_engine ?? "postgresql";
     const provider = createProvider(engine);
 
     try {

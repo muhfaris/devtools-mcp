@@ -11,10 +11,12 @@ afterEach(() => {
 describe("gitlab_set_config", () => {
   it("allows setting projectId without resupplying token if token already exists", async () => {
     (global as any).__devtools_config = {
-      gitlab: {
-        url: "https://gitlab.com",
-        token: "existing-token",
-        projectId: null,
+      providers: {
+        gitlab: {
+          url: "https://gitlab.com",
+          token: "existing-token",
+          projectId: null,
+        },
       },
     };
 

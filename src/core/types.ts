@@ -75,12 +75,10 @@ export interface GitLabConfig {
 export interface Config {
   id_generator?: { default?: string };
   providers?: ProvidersConfig;
-  // Legacy top-level fields (deprecated, fallback when providers.* absent)
-  database?: DatabaseConfig;
+  /** Shared write policy; a `providers.<provider>.security` block overrides it. */
   security?: SecurityConfig;
+  /** Reserved for the planned `codegraph` tool (PRD 5.5) — not read yet. */
   codegraph?: CodegraphConfig;
-  gitlab?: GitLabConfig;
-  redis?: RedisConfig;
 }
 
 export interface ProvidersConfig {
@@ -131,11 +129,6 @@ export interface SecurityConfig {
    * resolved project path or ID for GitLab.
    */
   blocked_env?: string[];
-  /** @deprecated Use the top-level keys; honoured for one release. */
-  execute_query?: {
-    allow_write?: boolean;
-    blocked_env?: string[];
-  };
 }
 
 export interface CodegraphConfig {

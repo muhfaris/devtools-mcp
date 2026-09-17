@@ -271,7 +271,7 @@ sequenceDiagram
 | Production blocking | Writes rejected when the identifier matches `blocked_env` (case-insensitive substring); defaults to `production`, `prod` |
 | Identifiers | The **connection name** for database and Redis — not the DSN — and the resolved **project path or ID** for GitLab |
 | Per-connection control | There is none by design: protect a connection by naming it in its provider's `blocked_env` |
-| Resolution | `providers.<provider>.security.X` ?? `security.X` ?? (deprecated `security.execute_query.X`) ?? default |
+| Resolution | `providers.<provider>.security.X` ?? `security.X` ?? default |
 
 ### Database
 
