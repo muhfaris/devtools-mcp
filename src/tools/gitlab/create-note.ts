@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
+import {
+  findBlockedEnvironment,
+  resolveAllowWrite,
+} from "../../core/security.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
 import {
   getGitLabClient,
@@ -360,7 +364,31 @@ export const gitlabCreateNoteTool: Tool = {
       );
     }
 
+    if (!resolveAllowWrite(config, "gitlab")) {
+      throw new ToolError(
+        "GITLAB_WRITE_DISABLED",
+        "GitLab write operations are disabled.",
+        "Ask the user to remove `providers.gitlab.security.allow_write: false` (or set it to true) in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.gitlab.security.allow_write" },
+      );
+    }
+
     const projectId = resolveProjectId(params, config);
+
+    // GitLab has no environment concept, so blocked_env is matched against the
+    // resolved project path or numeric ID instead.
+    const blockedEnv = findBlockedEnvironment(config, "gitlab", String(projectId));
+    if (blockedEnv) {
+      throw new ToolError(
+        "GITLAB_ENVIRONMENT_BLOCKED",
+        `GitLab writes are blocked for project "${projectId}" — it matches the blocked_env entry "${blockedEnv}".`,
+        "Choose a project that is not listed in providers.gitlab.security.blocked_env; do not retry against this project.",
+        false,
+        { configKey: "providers.gitlab.security.blocked_env" },
+      );
+    }
+
     const mrId = resolveMrId(params);
     const body = params.body || "";
 

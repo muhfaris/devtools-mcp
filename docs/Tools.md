@@ -8,6 +8,7 @@
 | :--- | :--- | :--- |
 | `generate_ulid` | Generate ULID(s) | `devtools generate_ulid --count 5` |
 | `generate_uuid` | Generate UUID v4(s) | `devtools generate_uuid --count 3` |
+| `generate_id` | Generate identifiers in the format configured by `id_generator.default` (`ulid` or `uuid`); `--format` overrides | `devtools generate_id --count 5` |
 
 
 ## Dummy data
@@ -69,6 +70,8 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `gitlab_get_discussions` | Get MR discussions |
 | `gitlab_set_config` | Set GitLab token/URL/projectId for the session |
 
+> `gitlab_create_note` is the only GitLab write tool. It is blocked when `providers.gitlab.security.allow_write: false`, or when the resolved project path/ID matches `providers.gitlab.security.blocked_env`. Both keys are opt-in: an absent block means allowed. See [Configuration](./Configuration.md#what-is-actually-enforced).
+
 ## Database
 
 | Tool | Description |
@@ -92,7 +95,7 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `redis_delete_key` | Delete keys (needs confirm) | ✏️ | `devtools redis_delete_key --keys "user:1" --confirm true` |
 | `redis_expire_key` | Set/remove TTL on a key | ✏️ | `devtools redis_expire_key --key session:abc --ttl 3600` |
 
-> Write tools require `readonly: false` in the connection config and are blocked in environments matching `security.execute_query.blocked_env`.
+> Write tools require `readonly: false` on the connection and are blocked when the connection name matches `providers.redis.security.blocked_env` (falling back to `security.execute_query.blocked_env`, default `[production, prod]`). Set `providers.redis.security.allow_write: false` to disable Redis writes provider-wide. See [Configuration](./Configuration.md#what-is-actually-enforced).
 
 Redis connections may be **standalone** (`url`) or **sentinel-backed**
 (`sentinels` + `master_name`). With Sentinel, the master is re-resolved on every
@@ -107,7 +110,9 @@ connect, so failovers are transparent to all of the tools above. See
 | `gitlab_set_config` | Set GitLab config for the session |
 | `database_set_connection` | Set a DB connection for the session |
 | `providers_info` | Show safe database, GitLab, and Redis configuration; use `live: true` to check database health |
-| `config_init` | Create a starter `.devtools/config.yaml` with database/GitLab/Redis connections; refuses to overwrite an existing config |
+| `show_config` | Show the effective, credential-redacted runtime configuration and reload status |
+| `reload_config` | Re-read `.devtools/config.yaml`, replace the runtime config, and return the redacted view |
+| `config_init` | Create a starter `.devtools/config.yaml` with database/GitLab/Redis connections; refuses to overwrite an existing config. Redis connections are always written standalone — see [limits](./Configuration.md#config_init-output) |
 
 `providers_info` is config-only by default. With `live: true`, it connects only to configured database connections and reports their health. GitLab is never contacted and reports only `enabled` and `token_configured`; Redis reports safe connection metadata. Credentials and raw DSNs are never returned.
 

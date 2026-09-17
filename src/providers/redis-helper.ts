@@ -1,18 +1,17 @@
 import type { Config } from "../core/types.js";
 import { RedisProvider } from "./redis.js";
-
-const BLOCKED_ENV_TERMS = ["production", "prod"];
+import {
+  findBlockedEnvironment,
+  isProviderEnabled,
+  resolveAllowWrite,
+  resolveBlockedEnvs,
+} from "../core/security.js";
 
 const getRedisConfig = (config: Config) =>
   config.providers?.redis ?? config.redis;
 
-const getBlockedEnvs = (config: Config): string[] =>
-  config.providers?.redis?.security?.blocked_env ??
-  config.security?.execute_query?.blocked_env ??
-  BLOCKED_ENV_TERMS;
-
 const assertEnabled = (config: Config) => {
-  if (config.providers?.redis?.enabled === false) {
+  if (!isProviderEnabled(config, "redis")) {
     throw new Error(
       "Redis is disabled in configuration. Enable providers.redis.enabled in .devtools/config.yaml.",
     );
@@ -33,7 +32,15 @@ export const assertWriteAllowed = (
     throw new Error(`Redis connection "${connectionName}" not found.`);
   }
 
-  // Layer 1: readonly flag
+  // Layer 1: provider-wide kill switch
+  if (!resolveAllowWrite(config, "redis")) {
+    throw new Error(
+      "Write operations are disabled for the Redis provider. " +
+        "Set `providers.redis.security.allow_write: true` in .devtools/config.yaml to enable writes.",
+    );
+  }
+
+  // Layer 2: readonly flag
   if (connConfig.readonly !== false) {
     throw new Error(
       `Write operations are blocked on connection "${connectionName}". ` +
@@ -41,15 +48,11 @@ export const assertWriteAllowed = (
     );
   }
 
-  // Layer 2: blocked environment names
-  const blocked = getBlockedEnvs(config);
-  if (
-    blocked.some((env) =>
-      connectionName.toLowerCase().includes(env.toLowerCase()),
-    )
-  ) {
+  // Layer 3: blocked environment names
+  const blockedEnv = findBlockedEnvironment(config, "redis", connectionName);
+  if (blockedEnv) {
     throw new Error(
-      `Write operations are blocked on "${connectionName}" — environment name matches blocked list (${blocked.join(", ")}).`,
+      `Write operations are blocked on "${connectionName}" — environment name matches blocked list (${resolveBlockedEnvs(config, "redis").join(", ")}).`,
     );
   }
 };

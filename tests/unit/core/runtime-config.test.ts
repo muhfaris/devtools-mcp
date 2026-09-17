@@ -4,10 +4,11 @@ vi.mock("fs", () => ({ existsSync: vi.fn(() => true) }));
 vi.mock("../../../src/core/config.js", () => ({
   getConfigPath: vi.fn(),
   reloadConfig: vi.fn(),
+  loadConfig: vi.fn(),
 }));
 
 import { existsSync } from "fs";
-import { getConfigPath, reloadConfig } from "../../../src/core/config.js";
+import { getConfigPath, loadConfig, reloadConfig } from "../../../src/core/config.js";
 import {
   applyRuntimeConfig,
   getConfigRuntimeState,
@@ -17,6 +18,7 @@ import {
 
 const mockGetConfigPath = getConfigPath as unknown as ReturnType<typeof vi.fn>;
 const mockReloadConfig = reloadConfig as unknown as ReturnType<typeof vi.fn>;
+const mockLoadConfig = loadConfig as unknown as ReturnType<typeof vi.fn>;
 const mockExistsSync = existsSync as unknown as ReturnType<typeof vi.fn>;
 
 const originalConfig = (global as any).__devtools_config;
@@ -69,6 +71,42 @@ describe("runtime configuration", () => {
   it("rejects reload when no loaded config path exists", async () => {
     mockGetConfigPath.mockReturnValue(null);
     mockExistsSync.mockReturnValue(false);
+    mockLoadConfig.mockResolvedValue({});
     await expect(reloadRuntimeConfig()).rejects.toThrow("No loaded");
+  });
+
+  it("discovers a config created after boot", async () => {
+    const discovered = {
+      providers: { redis: { connections: { dev: { url: "redis://localhost" } } } },
+    };
+    mockGetConfigPath.mockReturnValue(null);
+    mockExistsSync.mockReturnValue(false);
+    mockLoadConfig.mockImplementation(async () => {
+      mockGetConfigPath.mockReturnValue("/project/.devtools/config.yaml");
+      return discovered;
+    });
+
+    const config = await reloadRuntimeConfig();
+
+    expect(config).toBe(discovered);
+    expect((global as any).__devtools_config).toBe(discovered);
+    expect(getConfigRuntimeState()).toMatchObject({
+      status: "loaded",
+      reloadError: null,
+    });
+    expect(getConfigRuntimeState().lastReloadedAt).not.toBeNull();
+  });
+
+  it("marks the reload as failed when discovery still finds nothing", async () => {
+    mockGetConfigPath.mockReturnValue(null);
+    mockExistsSync.mockReturnValue(false);
+    mockLoadConfig.mockResolvedValue({});
+
+    await expect(reloadRuntimeConfig()).rejects.toThrow("No loaded");
+
+    expect(getConfigRuntimeState()).toMatchObject({
+      status: "reload_failed",
+      reloadError: "No loaded .devtools/config.yaml file to reload",
+    });
   });
 });

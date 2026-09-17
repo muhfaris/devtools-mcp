@@ -266,8 +266,8 @@ sequenceDiagram
 
 | Feature | Implementation |
 | :--- | :--- |
-| Read-only by default | `execute_query` blocks writes unless `allow_write: true` |
-| Production blocking | Prevents writes on `production`, `prod`, `staging` |
+| Read-only by default | `execute_query` blocks writes unless `providers.database.security.allow_write: true` |
+| Production blocking | Writes rejected when the **connection name** matches `blocked_env`; defaults to `production`, `prod` |
 | No credential leaks | DSN values never logged |
 | Connection limits | `pool_size` limits concurrent connections |
 
@@ -277,7 +277,17 @@ sequenceDiagram
 | :--- | :--- |
 | Token security | Tokens from env vars, never hardcoded |
 | No token echo | Tokens never appear in responses |
+| Write kill switch | `gitlab_create_note` is blocked by `providers.gitlab.security.allow_write: false` (opt-in: absent means allowed) |
+| Project blocking | `providers.gitlab.security.blocked_env` matched against the resolved project path or ID |
 | Rate limiting | Respects GitLab API limits |
+
+### Redis
+
+| Feature | Implementation |
+| :--- | :--- |
+| Per-connection read-only | `connections.<name>.readonly` must be exactly `false` for write tools |
+| Write kill switch | `providers.redis.security.allow_write: false` blocks all writes (opt-in: absent means allowed) |
+| Environment blocking | `blocked_env` matched against the connection name; defaults to `production`, `prod` |
 
 ### Configuration
 

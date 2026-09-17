@@ -2,6 +2,7 @@ import { ToolRegistry } from "../core/registry.js";
 import { Config } from "../core/types.js";
 import { generateUlidTool } from "./id-generators/ulid.js";
 import { generateUuidTool } from "./id-generators/uuid.js";
+import { generateIdTool } from "./id-generators/id.js";
 import { base64EncodeTool, base64DecodeTool } from "./encoding/base64.js";
 import { jwtDecodeTool } from "./encoding/jwt.js";
 import { hashGenerateTool } from "./encoding/hash.js";
@@ -61,6 +62,7 @@ export const registerAllTools = async (
 ) => {
   registry.register(generateUlidTool);
   registry.register(generateUuidTool);
+  registry.register(generateIdTool);
   registry.register(base64EncodeTool);
   registry.register(base64DecodeTool);
   registry.register(jwtDecodeTool);

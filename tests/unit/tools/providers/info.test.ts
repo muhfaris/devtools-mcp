@@ -83,6 +83,7 @@ describe("providers_info", () => {
     expect(result.redis).toEqual({
       enabled: true,
       default_connection: "cache",
+      security: { allow_write: true, blocked_env: ["production", "prod"] },
       connections: {
         cache: {
           mode: "standalone",

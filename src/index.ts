@@ -1,37 +1,16 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { watch } from "fs";
-import { loadConfig, getConfigPath } from "./core/config.js";
+import { loadConfig } from "./core/config.js";
 import { createRegistry, registerAllTools } from "./tools/index.js";
 import { startMcpServer } from "./mcp/server.js";
-import {
-  applyRuntimeConfig,
-  reloadRuntimeConfig,
-} from "./core/runtime-config.js";
+import { applyRuntimeConfig } from "./core/runtime-config.js";
+import { startConfigWatcher } from "./core/config-watch.js";
 
 const applyConfig = (config: any) => applyRuntimeConfig(config);
-
-const startWatcher = () => {
-  const path = getConfigPath();
-  if (!path) return;
-  let timer: NodeJS.Timeout | null = null;
-  watch(path, () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(async () => {
-      try {
-        await reloadRuntimeConfig();
-        console.warn("🔄 .devtools/config.yaml reloaded");
-      } catch (error: any) {
-        console.warn("⚠️ Config reload failed:", error.message);
-      }
-    }, 200);
-  });
-};
 
 const main = async () => {
   const config = await loadConfig();
   applyConfig(config);
-  startWatcher();
 
   const registry = createRegistry();
   await registerAllTools(registry, config);
@@ -68,6 +47,8 @@ const main = async () => {
 
     await program.parseAsync(process.argv);
   } else {
+    // The watcher only matters for the long-running MCP server.
+    startConfigWatcher();
     await startMcpServer(registry);
   }
 };

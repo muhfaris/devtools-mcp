@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import type { Config } from "./types.js";
-import { getConfigPath, reloadConfig } from "./config.js";
+import { getConfigPath, loadConfig, reloadConfig } from "./config.js";
 
 export type ConfigRuntimeState = {
   status: "not_loaded" | "loaded" | "reload_failed";
@@ -35,10 +35,19 @@ export const reloadRuntimeConfig = async (): Promise<Config> => {
 
   try {
     const configPath = getConfigPath();
-    if (!configPath || !existsSync(configPath)) {
+    if (configPath && existsSync(configPath)) {
+      const config = await reloadConfig();
+      applyRuntimeConfig(config, true);
+      return config;
+    }
+
+    // No path was recorded at boot, or the file was removed under us. Re-run
+    // discovery so a config created after startup is picked up; `loadConfig`
+    // records the new path as a side effect.
+    const config = await loadConfig();
+    if (!getConfigPath()) {
       throw new Error("No loaded .devtools/config.yaml file to reload");
     }
-    const config = await reloadConfig();
     applyRuntimeConfig(config, true);
     return config;
   } catch (error: any) {

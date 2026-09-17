@@ -3,6 +3,7 @@ import { join } from "path";
 import type { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
 import { applyRuntimeConfig } from "../../core/runtime-config.js";
+import { startConfigWatcher } from "../../core/config-watch.js";
 import { loadConfig } from "../../core/config.js";
 
 const referenceTemplate = `# DevTools MCP - Configuration
@@ -152,6 +153,9 @@ ${yamlJoin(
       );
     }
     if (redis?.length) {
+      // No `security` block: `providers.redis.security.allow_write` is a kill switch
+      // that only blocks when explicitly false, so emitting it would disable writes
+      // in a freshly scaffolded config.
       providerBlocks.push(`  redis:
     enabled: true
     default_connection: ${
@@ -161,9 +165,7 @@ ${yamlJoin(
 ${yamlJoin(
       listConnections(redis, "redis")?.split("\n") ?? [],
       4,
-    )}
-    security:
-      allow_write: false`);
+    )}`);
     }
 
     let content: string;
@@ -194,6 +196,9 @@ ${yamlJoin(
 
     const loaded = await loadConfig();
     applyRuntimeConfig(loaded, true);
+
+    // The scaffolded file did not exist at boot, so point the watcher at it now.
+    startConfigWatcher();
 
     return {
       content: [

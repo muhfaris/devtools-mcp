@@ -53,6 +53,7 @@ describe("show_config", () => {
       enabled: true,
       url: "https://gitlab.example.com",
       projectId: 42,
+      security: { allow_write: true, blocked_env: [] },
       token_configured: true,
     });
   });

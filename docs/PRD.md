@@ -217,7 +217,9 @@ Tiap fase tetap shippable & usable secara independen — bukan blocked total sam
 ## 9. Security & Safety
 
 - `execute_query` **default read-only**. Write query butuh eksplisit `allow_write: true` di config, dan direkomendasikan hanya untuk environment dev/staging.
-- Environment yang ditandai `production` (via config atau deteksi otomatis dari nama DSN/host) — `execute_query` write & `seed_database` **diblokir default**, butuh override eksplisit + konfirmasi.
+- Environment yang ditandai `production`/`prod` — dicocokkan ke **nama koneksi** (bukan DSN/host) lewat `blocked_env`, default `[production, prod]`; `execute_query` write & `seed_database` **diblokir default**, butuh override eksplisit + konfirmasi.
+- Redis: gerbang pertama adalah `readonly` per koneksi (harus persis `false`); `providers.redis.security.allow_write: false` mematikan semua write tingkat provider.
+- GitLab: `gitlab_create_note` hanya diblokir oleh `providers.gitlab.security.allow_write: false` — beda dengan database, key ini **kill switch** (default allow) supaya konfigurasi lama tetap jalan.
 - Kredensial DB tidak pernah di-log atau dikembalikan dalam response tool (masking otomatis).
 - `fake_person`/`fake_company` harus jelas-jelas generate data sintetis, tidak boleh accidental leak data asli dari DB connected (isolasi logic generator dari logic introspection).
 - Audit log lokal untuk semua tool kategori mutasi (execute_query write, seed_database).

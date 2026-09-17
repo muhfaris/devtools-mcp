@@ -75,6 +75,47 @@ describe("redis write tools", () => {
     });
   });
 
+  describe("allow_write kill switch", () => {
+    it("blocks writes when providers.redis.security.allow_write is false", async () => {
+      (global as any).__devtools_config = {
+        providers: {
+          redis: {
+            connections: { dev: { url: "redis://localhost", readonly: false } },
+            security: { allow_write: false },
+          },
+        },
+      };
+
+      await expect(
+        redisSetKeyTool.execute({ key: "test", value: "hello" }),
+      ).rejects.toThrow("Write operations are disabled for the Redis provider");
+    });
+
+    it("allows writes when allow_write is explicitly true", async () => {
+      (global as any).__devtools_config = {
+        providers: {
+          redis: {
+            connections: { dev: { url: "redis://localhost", readonly: false } },
+            security: { allow_write: true },
+          },
+        },
+      };
+
+      const result = await redisSetKeyTool.execute({ key: "user:1", value: "Alice" });
+      expect(JSON.parse(result.content?.[0]?.text || "{}").set).toBe(true);
+    });
+
+    it("does not inherit the legacy security.execute_query.allow_write alias", async () => {
+      (global as any).__devtools_config = {
+        redis: { connections: { dev: { url: "redis://localhost", readonly: false } } },
+        security: { execute_query: { allow_write: false, blocked_env: [] } },
+      };
+
+      const result = await redisSetKeyTool.execute({ key: "user:1", value: "Alice" });
+      expect(JSON.parse(result.content?.[0]?.text || "{}").set).toBe(true);
+    });
+  });
+
   describe("redis_set_key", () => {
     beforeEach(() => setConfig(false));
 

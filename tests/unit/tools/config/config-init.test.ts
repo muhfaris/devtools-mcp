@@ -71,4 +71,15 @@ describe("config_init", () => {
     expect(file).toContain("id_generator:");
     expect(file).toContain("uuid");
   });
+
+  it("does not emit a Redis security block that would disable writes", async () => {
+    await run({
+      redis: [{ name: "cache", url: "redis://localhost:6379/1", readonly: false }],
+    });
+    const file = readFileSync(join(tmpDir, ".devtools", "config.yaml"), "utf-8");
+    const redisBlock = file.slice(file.indexOf("  redis:"));
+    expect(redisBlock).toContain("readonly: false");
+    expect(redisBlock).not.toContain("allow_write");
+    expect(redisBlock).not.toContain("security:");
+  });
 });

@@ -1,4 +1,5 @@
 import { reloadRuntimeConfig } from "../../core/runtime-config.js";
+import { startConfigWatcher } from "../../core/config-watch.js";
 import type { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
 import { getSafeConfigView } from "./show.js";
@@ -20,6 +21,11 @@ export const reloadConfigTool: Tool = {
         { configKey: ".devtools/config.yaml", cause: error },
       );
     }
+
+    // A config discovered by this reload may not have existed at boot, so make sure
+    // the watcher is pointed at it before returning.
+    startConfigWatcher();
+
     return {
       content: [
         {

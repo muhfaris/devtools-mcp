@@ -2,6 +2,10 @@ import { Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
 import { ToolError } from "../../core/errors.js";
 import {
+  findBlockedEnvironment,
+  resolveAllowWrite,
+} from "../../core/security.js";
+import {
   databaseRequestError,
   requireDatabaseConnection,
   requireQuery,
@@ -57,11 +61,7 @@ export const executeQueryTool: Tool = {
     const isWrite = !/^\s*SELECT/i.test(query);
 
     if (isWrite) {
-      const allowWrite =
-        config.providers?.database?.security?.allow_write ??
-        config.security?.execute_query?.allow_write ??
-        false;
-      if (!allowWrite) {
+      if (!resolveAllowWrite(config, "database")) {
         throw new ToolError(
           "DATABASE_WRITE_DISABLED",
           "Database write queries are disabled.",
@@ -70,15 +70,9 @@ export const executeQueryTool: Tool = {
           { configKey: "providers.database.security.allow_write" },
         );
       }
-      // Check blocked environments
-      const blockedEnvs = config.providers?.database?.security?.blocked_env ??
-        config.security?.execute_query?.blocked_env ?? ["production", "prod"];
-      // Try to detect env from DSN or connection name
-      if (
-        blockedEnvs.some((env: any) =>
-          connectionName.toLowerCase().includes(env),
-        )
-      ) {
+      // The connection name is the environment signal: a blocked entry appearing
+      // anywhere in it (e.g. "production") blocks writes on that connection.
+      if (findBlockedEnvironment(config, "database", connectionName)) {
         throw new ToolError(
           "DATABASE_ENVIRONMENT_BLOCKED",
           `Database writes are blocked for connection "${connectionName}".`,
