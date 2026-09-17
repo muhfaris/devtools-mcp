@@ -42,10 +42,10 @@ describe("config_init", () => {
   it("writes a config.yaml with database, gitlab, and redis", async () => {
     const out = await run({
       database: [
-        { name: "dev", dsn: "postgresql://localhost/dev", readonly: false, engine: "postgresql" },
+        { name: "dev", dsn: "postgresql://localhost/dev", engine: "postgresql" },
       ],
       gitlab: { url: "https://gitlab.com", tokenEnv: "GITLAB_TOKEN", projectId: "123" },
-      redis: [{ name: "cache", url: "redis://localhost:6379/1", readonly: true, db: 1 }],
+      redis: [{ name: "cache", url: "redis://localhost:6379/1", db: 1 }],
     });
 
     expect(out.ok).toBe(true);
@@ -54,12 +54,13 @@ describe("config_init", () => {
     expect(file).toContain("${GITLAB_TOKEN}");
     expect(file).toContain("url: redis://localhost:6379/1");
     expect(file).toContain("id_generator:");
+    expect(file).not.toContain("readonly");
     expect(out.data.path).toContain(".devtools/config.yaml");
   });
 
   it("updates runtime so show_config reflects the new file", async () => {
     await run({
-      database: [{ name: "prod", dsn: "postgresql://localhost/prod", readonly: true }],
+      database: [{ name: "prod", dsn: "postgresql://localhost/prod" }],
     });
     expect((global as any).__devtools_config).toBeTruthy();
   });
@@ -72,14 +73,22 @@ describe("config_init", () => {
     expect(file).toContain("uuid");
   });
 
-  it("does not emit a Redis security block that would disable writes", async () => {
+  it("scaffolds the shared write policy once, with no per-connection flag", async () => {
     await run({
-      redis: [{ name: "cache", url: "redis://localhost:6379/1", readonly: false }],
+      redis: [{ name: "cache", url: "redis://localhost:6379/1" }],
     });
+
     const file = readFileSync(join(tmpDir, ".devtools", "config.yaml"), "utf-8");
+    expect(file).not.toContain("readonly");
+
+    // No provider-scoped block: the shared one is the single place to edit.
     const redisBlock = file.slice(file.indexOf("  redis:"));
-    expect(redisBlock).toContain("readonly: false");
-    expect(redisBlock).not.toContain("allow_write");
     expect(redisBlock).not.toContain("security:");
+    expect(redisBlock).not.toContain("allow_write");
+
+    const sharedBlock = file.slice(file.indexOf("security:"), file.indexOf("providers:"));
+    expect(sharedBlock).toContain("allow_write: false");
+    expect(sharedBlock).toContain("blocked_env: [production, prod]");
+    expect(file.match(/^security:/gm)).toHaveLength(1);
   });
 });

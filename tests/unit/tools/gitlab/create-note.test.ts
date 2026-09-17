@@ -19,6 +19,7 @@ describe("gitlab_create_note", () => {
     });
 
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.example.org",
         token: "token",
@@ -44,6 +45,7 @@ describe("gitlab_create_note", () => {
 
   it("throws INVALID_ARGUMENT when body is empty", async () => {
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.com",
         token: "token",
@@ -61,6 +63,7 @@ describe("gitlab_create_note", () => {
 
   it("rejects conflicting mr_id and mr_url before creating a note", async () => {
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.example.com",
         token: "token",
@@ -100,6 +103,7 @@ describe("gitlab_create_note", () => {
     [{ path: "src/app.ts", line: 10, side: "center" }, "side"],
   ])("rejects invalid inline arguments %o", async (inlineParams, parameter) => {
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.com",
         token: "token",
@@ -144,6 +148,7 @@ describe("gitlab_create_note", () => {
     );
 
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.com",
         token: "token",
@@ -219,6 +224,7 @@ describe("gitlab_create_note", () => {
       }),
     );
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: {
         url: "https://gitlab.com",
         token: "token",
@@ -278,6 +284,7 @@ describe("gitlab_create_note", () => {
     ["invalid range line", { path: "src/app.ts", start_line: 10, end_line: 12, side: "right" }, "end_line"],
   ])("rejects %s before creating a note", async (_name, inlineParams, parameter) => {
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
@@ -327,6 +334,7 @@ describe("gitlab_create_note", () => {
       }),
     );
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
@@ -376,6 +384,7 @@ describe("gitlab_create_note", () => {
       }),
     );
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
@@ -420,6 +429,7 @@ describe("gitlab_create_note", () => {
 
   it("rejects an inline response without position metadata", async () => {
     (global as any).__devtools_config = {
+      security: { allow_write: true },
       gitlab: { url: "https://gitlab.com", token: "token", projectId: 100 },
     };
     const gitlabMod = await import("../../../../src/providers/gitlab.js");

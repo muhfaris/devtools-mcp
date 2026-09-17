@@ -116,15 +116,25 @@ export interface DatabaseConfig {
 
 export interface ConnectionConfig {
   dsn: string;
-  readonly: boolean;
   pool_size?: number;
   timeout?: number;
 }
 
 export interface SecurityConfig {
-  execute_query: {
-    allow_write: boolean;
-    blocked_env: string[];
+  /**
+   * Write grant for every provider. Denied by default, so a missing or misspelled
+   * block fails closed. A `providers.<provider>.security` block overrides this.
+   */
+  allow_write?: boolean;
+  /**
+   * Identifiers that may not write: the connection name for database and Redis, the
+   * resolved project path or ID for GitLab.
+   */
+  blocked_env?: string[];
+  /** @deprecated Use the top-level keys; honoured for one release. */
+  execute_query?: {
+    allow_write?: boolean;
+    blocked_env?: string[];
   };
 }
 
@@ -156,9 +166,8 @@ export interface RedisConnectionConfig {
   sentinel_tls?: boolean;
   /** AUTH username for the data node (Redis 6+). */
   username?: string;
-  /** AUTH password for the data node. */
+  /** AUTH password for the data node (Redis 6+). */
   password?: string;
-  readonly?: boolean;
   db?: number;
   timeout?: number;
 }

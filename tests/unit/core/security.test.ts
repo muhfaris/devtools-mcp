@@ -2,150 +2,184 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_BLOCKED_ENVS,
   findBlockedEnvironment,
-  inheritsLegacyBlockedEnvs,
   isProviderEnabled,
   resolveAllowWrite,
   resolveBlockedEnvs,
+  resolveSecurity,
 } from "../../../src/core/security.js";
 import type { Config } from "../../../src/core/types.js";
 
 const config = (value: unknown): Config => value as Config;
 
+const PROVIDERS = ["database", "gitlab", "redis"] as const;
+
+/** The deprecated shared location, honoured for one release. */
 const legacy = (execute_query: Record<string, unknown>) =>
   ({ security: { execute_query } }) as unknown as Config;
+
+const providerScoped = (provider: string, security: Record<string, unknown>) =>
+  config({ providers: { [provider]: { security } } });
 
 describe("isProviderEnabled", () => {
   it("treats an absent providers block as enabled", () => {
     expect(isProviderEnabled(config({}), "redis")).toBe(true);
   });
 
-  it.each(["database", "gitlab", "redis"] as const)(
-    "only an explicit false disables %s",
-    (provider) => {
-      expect(isProviderEnabled(config({ providers: { [provider]: {} } }), provider)).toBe(true);
-      expect(
-        isProviderEnabled(config({ providers: { [provider]: { enabled: true } } }), provider),
-      ).toBe(true);
-      expect(
-        isProviderEnabled(config({ providers: { [provider]: { enabled: false } } }), provider),
-      ).toBe(false);
-    },
-  );
+  it.each(PROVIDERS)("only an explicit false disables %s", (provider) => {
+    expect(isProviderEnabled(config({ providers: { [provider]: {} } }), provider)).toBe(true);
+    expect(
+      isProviderEnabled(config({ providers: { [provider]: { enabled: true } } }), provider),
+    ).toBe(true);
+    expect(
+      isProviderEnabled(config({ providers: { [provider]: { enabled: false } } }), provider),
+    ).toBe(false);
+  });
 });
 
 describe("resolveAllowWrite", () => {
-  describe("database (grant-style, deny by default)", () => {
-    it("denies when nothing is configured", () => {
-      expect(resolveAllowWrite(config({}), "database")).toBe(false);
-    });
-
-    it("honours the legacy security.execute_query.allow_write alias", () => {
-      expect(resolveAllowWrite(legacy({ allow_write: true }), "database")).toBe(true);
-    });
-
-    it("lets a provider-scoped value win over the legacy alias", () => {
-      const denied = config({
-        providers: { database: { security: { allow_write: false } } },
-        security: { execute_query: { allow_write: true } },
-      });
-      expect(resolveAllowWrite(denied, "database")).toBe(false);
-
-      const granted = config({
-        providers: { database: { security: { allow_write: true } } },
-        security: { execute_query: { allow_write: false } },
-      });
-      expect(resolveAllowWrite(granted, "database")).toBe(true);
-    });
-
-    it("treats a null value as absent, matching ?? semantics", () => {
-      const nulled = config({
-        providers: { database: { security: { allow_write: null } } },
-        security: { execute_query: { allow_write: true } },
-      });
-      expect(resolveAllowWrite(nulled, "database")).toBe(true);
-    });
+  it.each(PROVIDERS)("denies %s when nothing is configured", (provider) => {
+    expect(resolveAllowWrite(config({}), provider)).toBe(false);
   });
 
-  describe("gitlab and redis (kill-switch, permissive by default)", () => {
-    it.each(["gitlab", "redis"] as const)("permits %s when unset", (provider) => {
-      expect(resolveAllowWrite(config({}), provider)).toBe(true);
+  it.each(PROVIDERS)("grants %s from the provider-scoped block", (provider) => {
+    expect(
+      resolveAllowWrite(providerScoped(provider, { allow_write: true }), provider),
+    ).toBe(true);
+  });
+
+  it.each(PROVIDERS)("grants %s from the shared block", (provider) => {
+    expect(resolveAllowWrite(config({ security: { allow_write: true } }), provider)).toBe(
+      true,
+    );
+  });
+
+  it.each(PROVIDERS)(
+    "lets the provider-scoped block override the shared block for %s",
+    (provider) => {
+      const narrowed = config({
+        security: { allow_write: true },
+        providers: { [provider]: { security: { allow_write: false } } },
+      });
+      expect(resolveAllowWrite(narrowed, provider)).toBe(false);
+
+      const widened = config({
+        security: { allow_write: false },
+        providers: { [provider]: { security: { allow_write: true } } },
+      });
+      expect(resolveAllowWrite(widened, provider)).toBe(true);
+    },
+  );
+
+  it.each(PROVIDERS)(
+    "honours the deprecated security.execute_query.allow_write alias for %s",
+    (provider) => {
+      expect(resolveAllowWrite(legacy({ allow_write: true }), provider)).toBe(true);
+      expect(resolveAllowWrite(legacy({ allow_write: false }), provider)).toBe(false);
+    },
+  );
+
+  it.each(PROVIDERS)(
+    "prefers the shared block over the deprecated alias for %s",
+    (provider) => {
+      const both = config({
+        security: { allow_write: false, execute_query: { allow_write: true } },
+      });
+      expect(resolveAllowWrite(both, provider)).toBe(false);
+    },
+  );
+
+  it.each(PROVIDERS)("treats a null value as absent for %s", (provider) => {
+    const nulled = config({
+      security: { allow_write: true },
+      providers: { [provider]: { security: { allow_write: null } } },
     });
-
-    it.each(["gitlab", "redis"] as const)(
-      "blocks %s only on an explicit false",
-      (provider) => {
-        expect(
-          resolveAllowWrite(config({ providers: { [provider]: { security: { allow_write: false } } } }), provider),
-        ).toBe(false);
-        expect(
-          resolveAllowWrite(config({ providers: { [provider]: { security: { allow_write: true } } } }), provider),
-        ).toBe(true);
-      },
-    );
-
-    it.each(["gitlab", "redis"] as const)(
-      "never inherits the database allow_write alias for %s",
-      (provider) => {
-        expect(resolveAllowWrite(legacy({ allow_write: true }), provider)).toBe(true);
-        expect(resolveAllowWrite(legacy({ allow_write: false }), provider)).toBe(true);
-      },
-    );
+    expect(resolveAllowWrite(nulled, provider)).toBe(true);
   });
 });
 
 describe("resolveBlockedEnvs", () => {
-  it("falls back to the built-in default", () => {
-    expect(resolveBlockedEnvs(config({}), "database")).toEqual(DEFAULT_BLOCKED_ENVS);
-    expect(resolveBlockedEnvs(config({}), "redis")).toEqual(DEFAULT_BLOCKED_ENVS);
+  it.each(PROVIDERS)("falls back to the built-in default for %s", (provider) => {
+    expect(resolveBlockedEnvs(config({}), provider)).toEqual(DEFAULT_BLOCKED_ENVS);
   });
 
-  it("inherits the legacy shared list", () => {
-    expect(resolveBlockedEnvs(legacy({ blocked_env: ["staging"] }), "database")).toEqual([
+  it.each(PROVIDERS)("inherits the shared list for %s", (provider) => {
+    expect(resolveBlockedEnvs(config({ security: { blocked_env: ["staging"] } }), provider))
+      .toEqual(["staging"]);
+  });
+
+  it.each(PROVIDERS)(
+    "lets a provider-scoped list win, including an empty one, for %s",
+    (provider) => {
+      const scoped = config({
+        security: { blocked_env: ["production"] },
+        providers: { [provider]: { security: { blocked_env: [] } } },
+      });
+      expect(resolveBlockedEnvs(scoped, provider)).toEqual([]);
+    },
+  );
+
+  it.each(PROVIDERS)("honours the deprecated alias for %s", (provider) => {
+    expect(resolveBlockedEnvs(legacy({ blocked_env: ["staging"] }), provider)).toEqual([
       "staging",
     ]);
   });
+});
 
-  it("lets a provider-scoped list win, including an empty one", () => {
-    const scoped = config({
-      providers: { redis: { security: { blocked_env: [] } } },
-      security: { execute_query: { blocked_env: ["production"] } },
+describe("resolveSecurity", () => {
+  it.each(PROVIDERS)(
+    "agrees with the individual resolvers for %s",
+    (provider) => {
+      const both = config({
+        security: { allow_write: true, blocked_env: ["staging"] },
+        providers: { [provider]: { security: { blocked_env: ["canary"] } } },
+      });
+      expect(resolveSecurity(both, provider)).toEqual({
+        allow_write: resolveAllowWrite(both, provider),
+        blocked_env: resolveBlockedEnvs(both, provider),
+      });
+      expect(resolveSecurity(both, provider)).toEqual({
+        allow_write: true,
+        blocked_env: ["canary"],
+      });
+    },
+  );
+
+  it.each(PROVIDERS)("denies by default for %s", (provider) => {
+    expect(resolveSecurity(config({}), provider)).toEqual({
+      allow_write: false,
+      blocked_env: DEFAULT_BLOCKED_ENVS,
     });
-    expect(resolveBlockedEnvs(scoped, "redis")).toEqual([]);
-  });
-
-  it("does not inherit for GitLab", () => {
-    expect(inheritsLegacyBlockedEnvs("gitlab")).toBe(false);
-    expect(inheritsLegacyBlockedEnvs("database")).toBe(true);
-    expect(resolveBlockedEnvs(legacy({ blocked_env: ["production"] }), "gitlab")).toEqual([]);
-    expect(resolveBlockedEnvs(config({}), "gitlab")).toEqual([]);
-  });
-
-  it("still honours an explicitly configured GitLab list", () => {
-    const scoped = config({ providers: { gitlab: { security: { blocked_env: ["prod"] } } } });
-    expect(resolveBlockedEnvs(scoped, "gitlab")).toEqual(["prod"]);
   });
 });
 
 describe("findBlockedEnvironment", () => {
   it("matches a blocked entry anywhere in the connection name", () => {
     expect(findBlockedEnvironment(config({}), "database", "prod-replica")).toBe("prod");
-    expect(findBlockedEnvironment(config({}), "redis", "dev-production")).toBe("production");
+    expect(findBlockedEnvironment(config({}), "redis", "dev-production")).toBe(
+      "production",
+    );
     expect(findBlockedEnvironment(config({}), "database", "dev")).toBeUndefined();
   });
 
   it("matches case-insensitively on both sides", () => {
-    const mixed = config({ providers: { redis: { security: { blocked_env: ["Production"] } } } });
-    expect(findBlockedEnvironment(mixed, "redis", "my-PRODUCTION-cache")).toBe("Production");
+    const mixed = providerScoped("redis", { blocked_env: ["Production"] });
+    expect(findBlockedEnvironment(mixed, "redis", "my-PRODUCTION-cache")).toBe(
+      "Production",
+    );
   });
 
-  it("does not block GitLab project paths unless configured", () => {
-    expect(
-      findBlockedEnvironment(config({}), "gitlab", "group/product-catalog"),
-    ).toBeUndefined();
+  it("matches GitLab against the project path with the shared default list", () => {
+    expect(findBlockedEnvironment(config({}), "gitlab", "group/production-app")).toBe(
+      "production",
+    );
+    expect(findBlockedEnvironment(config({}), "gitlab", "group/product-catalog")).toBe(
+      "prod",
+    );
+    expect(findBlockedEnvironment(config({}), "gitlab", "group/billing")).toBeUndefined();
+  });
 
-    const scoped = config({
-      providers: { gitlab: { security: { blocked_env: ["production"] } } },
-    });
+  it("honours an explicitly configured GitLab list", () => {
+    const scoped = providerScoped("gitlab", { blocked_env: ["production"] });
     expect(findBlockedEnvironment(scoped, "gitlab", "group/production-app")).toBe(
       "production",
     );
@@ -153,7 +187,25 @@ describe("findBlockedEnvironment", () => {
   });
 
   it("handles non-string identifier and entry values without throwing", () => {
-    const numeric = config({ providers: { gitlab: { security: { blocked_env: [42] } } } });
+    const numeric = providerScoped("gitlab", { blocked_env: [42] });
     expect(findBlockedEnvironment(numeric, "gitlab", 1420 as unknown as string)).toBe("42");
   });
+});
+
+describe("regression: one grant plus blocked_env covers every provider", () => {
+  it.each(["database", "redis"] as const)(
+    "permits a dev connection and refuses prod-db for %s",
+    (provider) => {
+      const granted = config({
+        security: { allow_write: true, blocked_env: ["prod"] },
+      });
+
+      expect(resolveSecurity(granted, provider)).toEqual({
+        allow_write: true,
+        blocked_env: ["prod"],
+      });
+      expect(findBlockedEnvironment(granted, provider, "dev")).toBeUndefined();
+      expect(findBlockedEnvironment(granted, provider, "prod-db")).toBe("prod");
+    },
+  );
 });

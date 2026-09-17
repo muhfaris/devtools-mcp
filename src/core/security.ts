@@ -3,12 +3,14 @@ import type { Config } from "./types.js";
 /** Providers that carry a `security` block. */
 export type SecurityProvider = "database" | "gitlab" | "redis";
 
-/** Built-in blocked list, used when neither the provider nor the legacy key sets one. */
+/** Built-in blocked list, used when no `blocked_env` is configured anywhere. */
 export const DEFAULT_BLOCKED_ENVS = ["production", "prod"];
 
-/** Nullish semantics: a bare YAML key parses to `null`, which `??` treats as absent. */
-const defined = <T>(value: T | null | undefined): T | undefined =>
-  value === undefined || value === null ? undefined : value;
+/** Effective write policy for one provider. */
+export type ResolvedSecurity = {
+  allow_write: boolean;
+  blocked_env: string[];
+};
 
 const providerConfig = (config: Config, provider: SecurityProvider) => {
   const providers = config.providers;
@@ -26,65 +28,51 @@ export const isProviderEnabled = (
 ): boolean => providerConfig(config, provider)?.enabled !== false;
 
 /**
- * Write gate. Two semantics coexist, and the difference is deliberate.
+ * Write gate. One meaning for every provider: a **grant**, denied by default, so a
+ * missing or misspelled block fails closed.
  *
- * - `database` is **grant-style**: writes are denied unless `allow_write: true`.
- *   Its original home was the shared `security.execute_query` block, which is still
- *   honoured as an alias because that block describes this same provider.
- * - `gitlab` and `redis` are **kill-switch style**: only an explicit `false` blocks.
- *   Both were writable before this key existed (`readonly: false` on a Redis
- *   connection, a GitLab token), so denying by default would break every existing
- *   configuration. A permissive key must never inherit from another provider, so
- *   `security.execute_query.allow_write` is deliberately not consulted for them.
+ * A provider-scoped block overrides the shared top-level one, which lets a policy be
+ * set once and narrowed for a single provider where it differs.
  */
 export const resolveAllowWrite = (
   config: Config,
   provider: SecurityProvider,
-): boolean => {
-  const scoped = defined(providerConfig(config, provider)?.security?.allow_write);
-  if (scoped !== undefined) return scoped;
-
-  if (provider === "database") {
-    return config.security?.execute_query?.allow_write ?? false;
-  }
-
-  return true;
-};
+): boolean =>
+  providerConfig(config, provider)?.security?.allow_write ??
+  config.security?.allow_write ??
+  // Deprecated location, honoured for one release.
+  config.security?.execute_query?.allow_write ??
+  false;
 
 /**
- * Whether a provider inherits the shared/legacy `blocked_env` list.
+ * Identifiers that may not write. Restrictive, so every level is consulted: the
+ * provider block, the shared block, the deprecated alias, then the built-in default.
  *
- * GitLab opts out: it matches `blocked_env` against project paths, where a default of
- * `["production", "prod"]` would silently block any project whose path merely contains
- * "prod". Every other provider matches connection names, where those defaults are the
- * long-standing behaviour.
- */
-export const inheritsLegacyBlockedEnvs = (
-  provider: SecurityProvider,
-): boolean => provider !== "gitlab";
-
-/**
- * Blocked environment names.
- *
- * `blocked_env` is restrictive, so inheriting it can only ever block more: the
- * provider-scoped list wins, then the legacy shared block, then the built-in default.
- * Providers that do not inherit (see `inheritsLegacyBlockedEnvs`) resolve to `[]`
- * unless they declare their own list.
+ * The identifier is the connection name for `database` and `redis`, and the resolved
+ * project path or ID for `gitlab`.
  */
 export const resolveBlockedEnvs = (
   config: Config,
   provider: SecurityProvider,
-): string[] => {
-  const scoped = defined(providerConfig(config, provider)?.security?.blocked_env);
-  if (scoped !== undefined) return scoped;
-  if (!inheritsLegacyBlockedEnvs(provider)) return [];
-  return config.security?.execute_query?.blocked_env ?? DEFAULT_BLOCKED_ENVS;
-};
+): string[] =>
+  providerConfig(config, provider)?.security?.blocked_env ??
+  config.security?.blocked_env ??
+  config.security?.execute_query?.blocked_env ??
+  DEFAULT_BLOCKED_ENVS;
+
+/** The resolved policy for one provider, shared by the write gates and `show_config`. */
+export const resolveSecurity = (
+  config: Config,
+  provider: SecurityProvider,
+): ResolvedSecurity => ({
+  allow_write: resolveAllowWrite(config, provider),
+  blocked_env: resolveBlockedEnvs(config, provider),
+});
 
 /**
- * Match an identifier against the blocked list, case-insensitively on both sides.
- * Returns the offending entry as a string, or `undefined` when the identifier is
- * allowed. Entries are stringified because the parsed YAML is unvalidated.
+ * Match an identifier against the provider's blocked list, case-insensitively on both
+ * sides. Returns the offending entry as a string, or `undefined` when it is allowed.
+ * Entries are stringified because the parsed YAML is unvalidated.
  */
 export const findBlockedEnvironment = (
   config: Config,
@@ -97,3 +85,4 @@ export const findBlockedEnvironment = (
   );
   return match === undefined ? undefined : String(match);
 };
+

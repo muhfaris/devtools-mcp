@@ -6,12 +6,7 @@ import type {
   RedisConnectionConfig,
   Tool,
 } from "../../core/types.js";
-import {
-  isProviderEnabled,
-  resolveAllowWrite,
-  resolveBlockedEnvs,
-  type SecurityProvider,
-} from "../../core/security.js";
+import { isProviderEnabled, resolveSecurity } from "../../core/security.js";
 
 const developmentConnectionNames = new Set(["local", "dev", "development"]);
 const sensitiveQueryKeys =
@@ -35,7 +30,6 @@ const showConnection = (name: string, connection: ConnectionConfig) => {
   const credentialsExposed = developmentConnectionNames.has(name.toLowerCase());
   return {
     dsn: credentialsExposed ? connection.dsn : sanitizeDsn(connection.dsn),
-    readonly: connection.readonly,
     pool_size: connection.pool_size ?? null,
     timeout: connection.timeout ?? null,
     credentials_exposed: credentialsExposed,
@@ -83,19 +77,9 @@ const showRedisConnection = (name: string, connection: RedisConnectionConfig) =>
       connection.sentinel_password || connection.sentinel_username,
     ),
     db: connection.db ?? null,
-    readonly: connection.readonly ?? true,
     timeout: connection.timeout ?? null,
   };
 };
-
-/**
- * Effective security settings for a provider, so the resolved gates can be inspected
- * without re-deriving the precedence chains by hand.
- */
-const showProviderSecurity = (config: Config, provider: SecurityProvider) => ({
-  allow_write: resolveAllowWrite(config, provider),
-  blocked_env: resolveBlockedEnvs(config, provider),
-});
 
 export const getSafeConfigView = (config: Config = {}) => {
   const db = config.providers?.database ?? config.database;
@@ -111,7 +95,7 @@ export const getSafeConfigView = (config: Config = {}) => {
       ? {
           enabled: isProviderEnabled(config, "database"),
           default_engine: db.default_engine,
-          security: showProviderSecurity(config, "database"),
+          security: resolveSecurity(config, "database"),
           connections: Object.fromEntries(
             Object.entries(db.connections || {}).map(([name, connection]) => [
               name,
@@ -125,7 +109,7 @@ export const getSafeConfigView = (config: Config = {}) => {
           enabled: isProviderEnabled(config, "gitlab"),
           url: gitlab.url || "https://gitlab.com",
           projectId: gitlab.projectId ?? null,
-          security: showProviderSecurity(config, "gitlab"),
+          security: resolveSecurity(config, "gitlab"),
           token_configured: Boolean(gitlab.token),
         }
       : null,
@@ -133,7 +117,7 @@ export const getSafeConfigView = (config: Config = {}) => {
       ? {
           enabled: isProviderEnabled(config, "redis"),
           default_connection: redis.default_connection ?? null,
-          security: showProviderSecurity(config, "redis"),
+          security: resolveSecurity(config, "redis"),
           connections: Object.fromEntries(
             Object.entries(redis.connections || {}).map(([name, connection]) => [
               name,
@@ -142,12 +126,14 @@ export const getSafeConfigView = (config: Config = {}) => {
           ),
         }
       : null,
-    // Legacy aggregate view, kept for clients that predate the per-provider blocks.
+    // The shared layer, echoed so it is visible whether it was set at all. Each
+    // provider reports its own resolved policy above.
     security: {
-      execute_query: {
-        allow_write: resolveAllowWrite(config, "database"),
-        blocked_env: resolveBlockedEnvs(config, "database"),
-      },
+      allow_write: config.security?.allow_write ?? null,
+      blocked_env: config.security?.blocked_env ?? null,
+      ...(config.security?.execute_query
+        ? { deprecated_execute_query: config.security.execute_query }
+        : {}),
     },
   };
 };

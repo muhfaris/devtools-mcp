@@ -303,7 +303,6 @@ database:
   connections:
     local:
       dsn: postgresql://devuser:secret@localhost:5432/app_db
-      readonly: true
 ```
 
 ```yaml
@@ -313,7 +312,6 @@ database:
   connections:
     local:
       dsn: mysql://devuser:secret@localhost:3306/app_db
-      readonly: true
 ```
 
 ```yaml
@@ -323,7 +321,6 @@ database:
   connections:
     local:
       dsn: mariadb://devuser:secret@localhost:3306/app_db
-      readonly: true
 ```
 
 Percent-encode reserved characters in credentials. For example, the password
@@ -361,9 +358,9 @@ GRANT SELECT ON information_schema.* TO 'your_user'@'%';
 
 - **Never commit `.env` or tokens** to version control.
 - Use environment variables or secret managers (1Password, Vault) for production.
-- Database connections default to **read-only** for `execute_query`.
+- Write tools are **denied by default** for every provider; enable them with
+  `security.allow_write: true` and keep production connections out of `blocked_env`.
 - GitLab tokens are never logged or returned in responses.
-- Write operations require explicit config override (`allow_write: true`).
 
 ---
 

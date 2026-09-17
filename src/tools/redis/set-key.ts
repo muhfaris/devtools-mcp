@@ -4,7 +4,7 @@ import { withRedisWrite } from "../../providers/redis-helper.js";
 export const redisSetKeyTool: Tool = {
   name: "redis_set_key",
   description:
-    "Set a string value in Redis (requires connection with readonly: false)",
+    "Set a string value in Redis (requires providers.redis.security.allow_write)",
   params: {
     connection: {
       type: "string",

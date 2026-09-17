@@ -4,26 +4,32 @@ import { parseToolJson } from "../../../helpers/tools-test-helper.js";
 
 const originalConfig = (global as any).__devtools_config;
 
-const gitlabConfig = (gitlab: Record<string, unknown>) => ({
-  providers: {
-    gitlab: {
-      url: "https://gitlab.com",
-      token: "token",
-      ...gitlab,
-    },
-  },
+const gitlabProvider = (gitlab: Record<string, unknown>) => ({
+  providers: { gitlab: { url: "https://gitlab.com", token: "token", ...gitlab } },
 });
+
+const stubCreateNote = async () => {
+  const mockCreate = vi.fn().mockResolvedValue({
+    id: 901,
+    body: "LGTM",
+    author: { username: "tester" },
+    created_at: "2026-09-09T00:00:00Z",
+  });
+
+  const gitlabMod = await import("../../../../src/providers/gitlab.js");
+  gitlabMod.initGitLab((global as any).__devtools_config);
+  const client = gitlabMod.getGitLabClient();
+  (client as any).MergeRequestNotes = { create: mockCreate };
+  return mockCreate;
+};
 
 afterEach(() => {
   (global as any).__devtools_config = originalConfig;
 });
 
 describe("gitlab_create_note security", () => {
-  it("blocks writes when providers.gitlab.security.allow_write is false", async () => {
-    (global as any).__devtools_config = gitlabConfig({
-      projectId: 100,
-      security: { allow_write: false },
-    });
+  it("denies writes when nothing grants them", async () => {
+    (global as any).__devtools_config = gitlabProvider({ projectId: 100 });
 
     await expect(
       gitlabCreateNoteTool.execute({ mr_id: 12, body: "Review" }),
@@ -34,10 +40,43 @@ describe("gitlab_create_note security", () => {
     });
   });
 
+  it("grants writes from the provider-scoped block", async () => {
+    (global as any).__devtools_config = gitlabProvider({
+      projectId: 100,
+      security: { allow_write: true },
+    });
+
+    const mockCreate = await stubCreateNote();
+    await parseToolJson(gitlabCreateNoteTool, { mr_id: 12, body: "LGTM" });
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  it("grants writes from the shared block", async () => {
+    (global as any).__devtools_config = {
+      security: { allow_write: true },
+      ...gitlabProvider({ projectId: 100 }),
+    };
+
+    const mockCreate = await stubCreateNote();
+    await parseToolJson(gitlabCreateNoteTool, { mr_id: 12, body: "LGTM" });
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  it("lets the provider-scoped block deny while the shared block grants", async () => {
+    (global as any).__devtools_config = {
+      security: { allow_write: true },
+      ...gitlabProvider({ projectId: 100, security: { allow_write: false } }),
+    };
+
+    await expect(
+      gitlabCreateNoteTool.execute({ mr_id: 12, body: "Review" }),
+    ).rejects.toMatchObject({ code: "GITLAB_WRITE_DISABLED" });
+  });
+
   it("blocks projects matching a configured blocked_env entry", async () => {
-    (global as any).__devtools_config = gitlabConfig({
+    (global as any).__devtools_config = gitlabProvider({
       projectId: "group/production-app",
-      security: { blocked_env: ["production"] },
+      security: { allow_write: true, blocked_env: ["production"] },
     });
 
     await expect(
@@ -49,52 +88,37 @@ describe("gitlab_create_note security", () => {
     });
   });
 
-  it.each(["prod", "production"])(
-    "does not inherit the legacy default blocked list (project containing %s)",
-    async (term) => {
-      const mockCreate = vi.fn().mockResolvedValue({
-        id: 900,
-        body: "Review",
-        author: { username: "tester" },
-        created_at: "2026-09-09T00:00:00Z",
-      });
+  it("inherits the shared blocked_env list", async () => {
+    (global as any).__devtools_config = {
+      security: { allow_write: true, blocked_env: ["production"] },
+      ...gitlabProvider({ projectId: "group/production-app" }),
+    };
 
-      (global as any).__devtools_config = gitlabConfig({
-        projectId: `group/${term}-catalog`,
-      });
+    await expect(
+      gitlabCreateNoteTool.execute({ mr_id: 12, body: "Review" }),
+    ).rejects.toMatchObject({ code: "GITLAB_ENVIRONMENT_BLOCKED" });
+  });
 
-      const gitlabMod = await import("../../../../src/providers/gitlab.js");
-      gitlabMod.initGitLab((global as any).__devtools_config);
-      const client = gitlabMod.getGitLabClient();
-      (client as any).MergeRequestNotes = { create: mockCreate };
-
-      const res = await parseToolJson(gitlabCreateNoteTool, {
-        mr_id: 12,
-        body: "Review",
-      });
-
-      expect(mockCreate).toHaveBeenCalledWith(`group/${term}-catalog`, 12, "Review");
-      expect(res.success).toBe(true);
-    },
-  );
-
-  it("remains writable when no security block is configured", async () => {
-    const mockCreate = vi.fn().mockResolvedValue({
-      id: 901,
-      body: "LGTM",
-      author: { username: "tester" },
-      created_at: "2026-09-09T00:00:00Z",
+  it("blocks a project path matching the built-in default list", async () => {
+    (global as any).__devtools_config = gitlabProvider({
+      projectId: "group/product-catalog",
+      security: { allow_write: true },
     });
 
-    (global as any).__devtools_config = gitlabConfig({ projectId: 100 });
+    await expect(
+      gitlabCreateNoteTool.execute({ mr_id: 12, body: "Review" }),
+    ).rejects.toMatchObject({ code: "GITLAB_ENVIRONMENT_BLOCKED" });
+  });
 
-    const gitlabMod = await import("../../../../src/providers/gitlab.js");
-    gitlabMod.initGitLab((global as any).__devtools_config);
-    const client = gitlabMod.getGitLabClient();
-    (client as any).MergeRequestNotes = { create: mockCreate };
+  it("permits a project path that matches nothing", async () => {
+    (global as any).__devtools_config = gitlabProvider({
+      projectId: "group/billing",
+      security: { allow_write: true },
+    });
 
-    await parseToolJson(gitlabCreateNoteTool, { mr_id: 12, body: "LGTM" });
-
-    expect(mockCreate).toHaveBeenCalledOnce();
+    const mockCreate = await stubCreateNote();
+    const res = await parseToolJson(gitlabCreateNoteTool, { mr_id: 12, body: "LGTM" });
+    expect(mockCreate).toHaveBeenCalledWith("group/billing", 12, "LGTM");
+    expect(res.success).toBe(true);
   });
 });

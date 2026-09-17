@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { redisSetKeyTool } from "../../../../src/tools/redis/set-key.js";
 import { redisDeleteKeyTool } from "../../../../src/tools/redis/delete-key.js";
 import { redisExpireKeyTool } from "../../../../src/tools/redis/expire-key.js";
@@ -16,126 +16,149 @@ vi.mock("../../../../src/providers/redis.js", () => ({
   })),
 }));
 
-const setConfig = (readonly: boolean) => {
-  (global as any).__devtools_config = {
-    redis: {
-      connections: {
-        dev: { url: "redis://localhost:6379", readonly },
-      },
-    },
-    security: {
-      execute_query: {
-        allow_write: false,
-        blocked_env: ["production", "prod"],
-      },
-    },
-  };
+const useConfig = (value: unknown) => {
+  (global as any).__devtools_config = value;
 };
+
+const devConnection = { url: "redis://localhost:6379" };
+
+/** Writes are denied by default, so the functional suites opt in explicitly. */
+const grantWrites = () =>
+  useConfig(
+    configWithSharedGrant({
+      providers: { redis: { connections: { dev: devConnection } } },
+    }),
+  );
+
+const configWithSharedGrant = (value: Record<string, unknown>) => ({
+  security: { allow_write: true, blocked_env: [] },
+  ...value,
+});
+
+const parseText = (result: { content?: { text?: string }[] }): Record<string, any> =>
+  JSON.parse(result.content?.[0]?.text || "{}");
 
 describe("redis write tools", () => {
   afterEach(() => {
     delete (global as any).__devtools_config;
   });
 
-  describe("readonly enforcement", () => {
-    it("blocks write when readonly is true", async () => {
-      setConfig(true);
-      await expect(
-        redisSetKeyTool.execute({ key: "test", value: "hello" }),
-      ).rejects.toThrow("Write operations are blocked");
+  describe("write control", () => {
+    it("denies writes when nothing grants them", async () => {
+      useConfig({ providers: { redis: { connections: { dev: devConnection } } } });
+      await expect(redisSetKeyTool.execute({ key: "k", value: "v" })).rejects.toThrow(
+        "Redis writes are disabled",
+      );
     });
 
-    it("blocks write when readonly is undefined", async () => {
-      (global as any).__devtools_config = {
-        redis: { connections: { dev: { url: "redis://localhost" } } },
-      };
-      await expect(
-        redisSetKeyTool.execute({ key: "test", value: "hello" }),
-      ).rejects.toThrow("Write operations are blocked");
+    it("denies writes on a legacy top-level redis block too", async () => {
+      useConfig({ redis: { connections: { dev: devConnection } } });
+      await expect(redisSetKeyTool.execute({ key: "k", value: "v" })).rejects.toThrow(
+        "Redis writes are disabled",
+      );
     });
 
-    it("blocks write on connection named 'production'", async () => {
-      (global as any).__devtools_config = {
-        redis: {
-          connections: {
-            production: { url: "redis://localhost", readonly: false },
+    it("grants writes from the provider-scoped block", async () => {
+      useConfig({
+        providers: {
+          redis: { connections: { dev: devConnection }, security: { allow_write: true } },
+        },
+      });
+      expect(parseText(await redisSetKeyTool.execute({ key: "user:1", value: "A" })).set)
+        .toBe(true);
+    });
+
+    it("grants writes from the shared block", async () => {
+      grantWrites();
+      expect(parseText(await redisSetKeyTool.execute({ key: "user:1", value: "A" })).set)
+        .toBe(true);
+    });
+
+    it("lets the provider-scoped block narrow a shared grant", async () => {
+      useConfig({
+        security: { allow_write: true },
+        providers: {
+          redis: { connections: { dev: devConnection }, security: { allow_write: false } },
+        },
+      });
+      await expect(redisSetKeyTool.execute({ key: "k", value: "v" })).rejects.toThrow(
+        "Redis writes are disabled",
+      );
+    });
+
+    it("still honours the deprecated security.execute_query.allow_write alias", async () => {
+      useConfig({
+        redis: { connections: { dev: devConnection } },
+        security: { execute_query: { allow_write: true } },
+      });
+      expect(parseText(await redisSetKeyTool.execute({ key: "user:1", value: "A" })).set)
+        .toBe(true);
+    });
+
+    it("blocks a connection listed in the provider-scoped blocked_env", async () => {
+      useConfig({
+        providers: {
+          redis: {
+            connections: { "prod-cache": devConnection },
+            security: { allow_write: true, blocked_env: ["prod"] },
           },
         },
-        security: {
-          execute_query: { allow_write: false, blocked_env: ["production"] },
-        },
-      };
+      });
       await expect(
-        redisSetKeyTool.execute({
-          connection: "production",
-          key: "test",
-          value: "hello",
-        }),
+        redisSetKeyTool.execute({ connection: "prod-cache", key: "k", value: "v" }),
+      ).rejects.toThrow('matches the blocked_env entry "prod"');
+    });
+
+    it("blocks a connection matching the built-in default list", async () => {
+      useConfig({
+        security: { allow_write: true },
+        providers: {
+          redis: { connections: { production: devConnection } },
+        },
+      });
+      await expect(
+        redisSetKeyTool.execute({ connection: "production", key: "k", value: "v" }),
       ).rejects.toThrow("blocked");
     });
-  });
 
-  describe("allow_write kill switch", () => {
-    it("blocks writes when providers.redis.security.allow_write is false", async () => {
-      (global as any).__devtools_config = {
+    it("permits dev while refusing prod-db under one grant", async () => {
+      useConfig({
+        security: { allow_write: true, blocked_env: ["prod"] },
         providers: {
           redis: {
-            connections: { dev: { url: "redis://localhost", readonly: false } },
-            security: { allow_write: false },
+            connections: { dev: devConnection, "prod-db": devConnection },
           },
         },
-      };
+      });
 
+      expect(parseText(await redisSetKeyTool.execute({ key: "user:1", value: "A" })).set)
+        .toBe(true);
       await expect(
-        redisSetKeyTool.execute({ key: "test", value: "hello" }),
-      ).rejects.toThrow("Write operations are disabled for the Redis provider");
+        redisSetKeyTool.execute({ connection: "prod-db", key: "k", value: "v" }),
+      ).rejects.toThrow("blocked");
     });
 
-    it("allows writes when allow_write is explicitly true", async () => {
-      (global as any).__devtools_config = {
-        providers: {
-          redis: {
-            connections: { dev: { url: "redis://localhost", readonly: false } },
-            security: { allow_write: true },
-          },
-        },
-      };
-
-      const result = await redisSetKeyTool.execute({ key: "user:1", value: "Alice" });
-      expect(JSON.parse(result.content?.[0]?.text || "{}").set).toBe(true);
-    });
-
-    it("does not inherit the legacy security.execute_query.allow_write alias", async () => {
-      (global as any).__devtools_config = {
-        redis: { connections: { dev: { url: "redis://localhost", readonly: false } } },
-        security: { execute_query: { allow_write: false, blocked_env: [] } },
-      };
-
-      const result = await redisSetKeyTool.execute({ key: "user:1", value: "Alice" });
-      expect(JSON.parse(result.content?.[0]?.text || "{}").set).toBe(true);
+    it("rejects an unknown connection before reaching Redis", async () => {
+      grantWrites();
+      await expect(
+        redisSetKeyTool.execute({ connection: "nope", key: "k", value: "v" }),
+      ).rejects.toThrow('Redis connection "nope" not found');
     });
   });
 
   describe("redis_set_key", () => {
-    beforeEach(() => setConfig(false));
+    beforeEach(grantWrites);
 
     it("sets a key successfully", async () => {
-      const result = await redisSetKeyTool.execute({
-        key: "user:1",
-        value: "Alice",
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(await redisSetKeyTool.execute({ key: "user:1", value: "Alice" }));
       expect(data.set).toBe(true);
       expect(data.key).toBe("user:1");
     });
 
     it("normalizes a valid mode", async () => {
-      const result = await redisSetKeyTool.execute({
-        key: "test",
-        value: "x",
-        mode: "nx",
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(
+        await redisSetKeyTool.execute({ key: "test", value: "x", mode: "nx" }),
+      );
       expect(data.mode).toBe("NX");
     });
 
@@ -152,81 +175,66 @@ describe("redis write tools", () => {
     });
 
     it("requires key and value", async () => {
-      await expect(
-        redisSetKeyTool.execute({ value: "x" } as any),
-      ).rejects.toThrow("Key is required");
-      await expect(
-        redisSetKeyTool.execute({ key: "k" } as any),
-      ).rejects.toThrow("Value is required");
+      await expect(redisSetKeyTool.execute({ value: "x" } as any)).rejects.toThrow(
+        "Key is required",
+      );
+      await expect(redisSetKeyTool.execute({ key: "k" } as any)).rejects.toThrow(
+        "Value is required",
+      );
     });
   });
 
   describe("redis_delete_key", () => {
-    beforeEach(() => setConfig(false));
+    beforeEach(grantWrites);
 
     it("requires confirm: true to delete", async () => {
-      const result = await redisDeleteKeyTool.execute({
-        keys: "user:1,user:2",
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(await redisDeleteKeyTool.execute({ keys: "user:1,user:2" }));
       expect(data.deleted).toBe(0);
       expect(data.confirmationRequired).toBe(true);
       expect(data.wouldDelete).toEqual(["user:1", "user:2"]);
     });
 
     it("deletes with confirm: true", async () => {
-      const result = await redisDeleteKeyTool.execute({
-        keys: "user:1,user:2",
-        confirm: true,
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(
+        await redisDeleteKeyTool.execute({ keys: "user:1,user:2", confirm: true }),
+      );
       expect(data.deleted).toBe(2);
     });
 
     it("supports dry run", async () => {
-      const result = await redisDeleteKeyTool.execute({
-        keys: "user:1,user:2",
-        dry_run: true,
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(
+        await redisDeleteKeyTool.execute({ keys: "user:1,user:2", dry_run: true }),
+      );
       expect(data.dryRun).toBe(true);
       expect(data.deleted).toBeUndefined();
     });
 
     it("enforces max keys", async () => {
       const manyKeys = Array.from({ length: 101 }, (_, i) => `k${i}`).join(",");
-      await expect(
-        redisDeleteKeyTool.execute({ keys: manyKeys }),
-      ).rejects.toThrow("Maximum 100 keys");
+      await expect(redisDeleteKeyTool.execute({ keys: manyKeys })).rejects.toThrow(
+        "Maximum 100 keys",
+      );
     });
   });
 
   describe("redis_expire_key", () => {
-    beforeEach(() => setConfig(false));
+    beforeEach(grantWrites);
 
     it("sets TTL on a key", async () => {
-      const result = await redisExpireKeyTool.execute({
-        key: "user:1",
-        ttl: 3600,
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(await redisExpireKeyTool.execute({ key: "user:1", ttl: 3600 }));
       expect(data.updated).toBe(true);
       expect(data.ttl).toBe("3600s");
     });
 
     it("removes expiry with ttl <= 0", async () => {
-      const result = await redisExpireKeyTool.execute({
-        key: "user:1",
-        ttl: 0,
-      });
-      const data = JSON.parse(result.content?.[0]?.text || "{}");
+      const data = parseText(await redisExpireKeyTool.execute({ key: "user:1", ttl: 0 }));
       expect(data.ttl).toBe("removed (no expiry)");
     });
 
     it("requires TTL parameter", async () => {
-      await expect(
-        redisExpireKeyTool.execute({ key: "user:1" } as any),
-      ).rejects.toThrow("TTL is required");
+      await expect(redisExpireKeyTool.execute({ key: "user:1" } as any)).rejects.toThrow(
+        "TTL is required",
+      );
     });
   });
 });

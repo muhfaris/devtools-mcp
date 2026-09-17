@@ -70,14 +70,14 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `gitlab_get_discussions` | Get MR discussions |
 | `gitlab_set_config` | Set GitLab token/URL/projectId for the session |
 
-> `gitlab_create_note` is the only GitLab write tool. It is blocked when `providers.gitlab.security.allow_write: false`, or when the resolved project path/ID matches `providers.gitlab.security.blocked_env`. Both keys are opt-in: an absent block means allowed. See [Configuration](./Configuration.md#what-is-actually-enforced).
+> `gitlab_create_note` is the only GitLab write tool. Writes are **denied by default**: enable them with `security.allow_write: true` (or `providers.gitlab.security.allow_write: true`), and keep the resolved project path/ID out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
 
 ## Database
 
 | Tool | Description |
 | :--- | :--- |
 | `get_db_schema` | Introspect schema (tables, columns, constraints) |
-| `execute_query` | Run a read-only SQL query |
+| `execute_query` | Run a SQL query (writes need an explicit grant) |
 | `explain_query` | Run EXPLAIN and summarize performance |
 | `database_set_connection` | Add/update a DB connection for the session |
 
@@ -95,7 +95,7 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `redis_delete_key` | Delete keys (needs confirm) | ✏️ | `devtools redis_delete_key --keys "user:1" --confirm true` |
 | `redis_expire_key` | Set/remove TTL on a key | ✏️ | `devtools redis_expire_key --key session:abc --ttl 3600` |
 
-> Write tools require `readonly: false` on the connection and are blocked when the connection name matches `providers.redis.security.blocked_env` (falling back to `security.execute_query.blocked_env`, default `[production, prod]`). Set `providers.redis.security.allow_write: false` to disable Redis writes provider-wide. See [Configuration](./Configuration.md#what-is-actually-enforced).
+> Write tools are **denied by default**: enable them with `security.allow_write: true` (or `providers.redis.security.allow_write: true`), and keep the connection name out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
 
 Redis connections may be **standalone** (`url`) or **sentinel-backed**
 (`sentinels` + `master_name`). With Sentinel, the master is re-resolved on every

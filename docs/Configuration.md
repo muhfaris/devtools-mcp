@@ -30,6 +30,11 @@ the path to each MCP client.
 id_generator:
   default: ulid                       # ulid | uuid — read by generate_id
 
+# Write policy. One meaning for every provider: a grant, denied by default.
+security:
+  allow_write: false                  # true enables the write tools
+  blocked_env: [production, prod]     # connection name, or GitLab project path
+
 providers:
   database:
     enabled: true                     # only an explicit false disables
@@ -37,12 +42,11 @@ providers:
     connections:
       dev:
         dsn: ${DEV_DATABASE_URL}
-        readonly: false
         pool_size: 10                 # optional
         timeout: 30000                # optional, ms
-    security:
-      allow_write: false
-      blocked_env: [production, prod]
+    security:                         # optional override, wins over the shared block
+      allow_write: true
+      blocked_env: [production, prod, staging]
 
   gitlab:
     enabled: true
@@ -50,8 +54,8 @@ providers:
     token: ${GITLAB_TOKEN}
     projectId: 12345
     security:
-      allow_write: true               # only an explicit false blocks writes
-      blocked_env: []                 # matched against the project path or ID
+      allow_write: true               # grant for gitlab_create_note
+      blocked_env: [production]       # matched against the project path or ID
 
   redis:
     enabled: true
@@ -59,11 +63,9 @@ providers:
     connections:
       dev:
         url: ${REDIS_URL}
-        readonly: true
         timeout: 5000
       cache:
         url: redis://localhost:6379/1
-        readonly: true
       sentinel-dev:
         sentinels:
           - host: 127.0.0.1
@@ -76,10 +78,9 @@ providers:
         sentinel_password: ${REDIS_SENTINEL_PASSWORD}
         password: ${REDIS_PASSWORD}
         db: 0
-        readonly: true
         timeout: 5000
     security:
-      allow_write: true               # only an explicit false blocks writes
+      allow_write: false              # narrow redis while the others stay writable
       blocked_env: [production, prod] # matched against the connection name
 
 # Reserved for the planned codegraph tool (PRD 5.5) — not read yet.
@@ -123,12 +124,11 @@ A connection is either **standalone** (`url`) or **sentinel-backed**
 | `sentinel_tls` | sentinel | Enable TLS when talking to the sentinels |
 | `username` / `password` | both | AUTH for the data node (Redis 6+ ACL) |
 | `db` | both | Logical database index (default `0`) |
-| `readonly` | both | Defaults to `true`; must be `false` for write tools |
 | `timeout` | both | Socket/connect timeout in ms (default `5000`) |
 
 Sentinel connections resolve the current master via the Sentinel nodes on every
 connect, so failovers are picked up automatically. `role: slave` resolves a
-replica; combined with `readonly: false` writes will fail with `READONLY`.
+replica; writing through it fails with `READONLY`.
 
 The active connection is `connectionName` → `default_connection` → first key in
 `connections`.
@@ -171,43 +171,39 @@ lookup falls back to the legacy location. The exact expressions in code are:
 | Database config | `providers.database` ?? `database` | — |
 | Database engine | `database.default_engine` | `postgresql` |
 | Provider enabled | `providers.<provider>.enabled` | enabled unless `false` |
-| DB write gate | `providers.database.security.allow_write` ?? `security.execute_query.allow_write` ?? `false` | `false` |
-| GitLab write gate | `providers.gitlab.security.allow_write` | `true` unless `false` |
-| Redis write gate | `providers.redis.security.allow_write` | `true` unless `false` |
-| DB blocked envs | `providers.database.security.blocked_env` ?? `security.execute_query.blocked_env` ?? `[production, prod]` | `[production, prod]` |
-| Redis blocked envs | `providers.redis.security.blocked_env` ?? `security.execute_query.blocked_env` ?? `[production, prod]` | `[production, prod]` |
-| GitLab blocked envs | `providers.gitlab.security.blocked_env` | `[]` |
+| Write gate (any provider) | `providers.<provider>.security.allow_write` ?? `security.allow_write` ?? `security.execute_query.allow_write` ?? `false` | `false` |
+| Blocked identifiers (any provider) | `providers.<provider>.security.blocked_env` ?? `security.blocked_env` ?? `security.execute_query.blocked_env` ?? `[production, prod]` | `[production, prod]` |
 | GitLab config | `providers.gitlab` ?? `gitlab` | — |
 | GitLab project | `params.project_id` ?? `providers.gitlab.projectId` ?? `gitlab.projectId` | — |
 | Redis config | `providers.redis` ?? `redis` | — |
 
-Two inheritance rules differ on purpose:
+Both security keys resolve through **one chain, for every provider**:
 
-- **Restrictive keys inherit.** `blocked_env` falls back to the shared
-  `security.execute_query.blocked_env` and then to the built-in default, because a
-  fallback can only ever block *more*.
-- **Permissive keys never inherit across providers.** `allow_write` for GitLab and
-  Redis is not read from `security.execute_query`, because inheriting a grant would
-  silently widen write access. The database is the exception: that shared block was
-  its own original home. GitLab's `blocked_env` likewise inherits nothing.
+- The provider-scoped block wins when present, so a policy can be set once at the
+  top level and narrowed for a single provider where it differs.
+- `blocked_env` is *restrictive*, so every level is consulted: a fallback can only
+  ever block more, never less.
+- `allow_write` is a *grant*, so it is denied when nothing sets it. A missing or
+  misspelled block fails closed.
+- `security.execute_query.*` is the deprecated spelling of `security.*`. It is still
+  honoured for one release and never overrides the newer keys.
 
 Legacy top-level shape (still honoured, now deprecated):
 
 ```yaml
 database:
   default_engine: postgresql
-  connections: { dev: { dsn: ${DEV_DATABASE_URL}, readonly: false } }
+  connections: { dev: { dsn: ${DEV_DATABASE_URL} } }
 security:
-  execute_query:
-    allow_write: false
-    blocked_env: [production, prod]
+  allow_write: true
+  blocked_env: [production, prod]
 gitlab:
   url: https://gitlab.com
   token: ${GITLAB_TOKEN}
   projectId: 12345
 redis:
   default_connection: dev
-  connections: { dev: { url: ${REDIS_URL}, readonly: true } }
+  connections: { dev: { url: ${REDIS_URL} } }
 ```
 
 ## Security model
@@ -217,12 +213,18 @@ redis:
 | Gate | Key read | Notes |
 | :--- | :--- | :--- |
 | Provider kill switch | `providers.<provider>.enabled` | Only an explicit `false` disables |
-| Database writes | `providers.database.security.allow_write` (or legacy) | **Grant-style: denied by default.** Any statement not matching `/^\s*SELECT/i` counts as a write |
-| Database blocked envs | `providers.database.security.blocked_env` (or legacy) | Case-insensitive substring match against the **connection name** — not the DSN |
-| Redis writes | `providers.redis.security.allow_write` **and** `connections.<name>.readonly` | Both gates must pass: `allow_write` allows unless explicitly `false`, and `readonly` must be exactly `false` |
-| Redis blocked envs | `providers.redis.security.blocked_env` (or legacy) | Case-insensitive substring match against the connection name |
-| GitLab writes | `providers.gitlab.security.allow_write` | Applies to `gitlab_create_note`. **Kill-switch style: allowed unless explicitly `false`** |
-| GitLab blocked envs | `providers.gitlab.security.blocked_env` | GitLab has no environment concept, so the list is matched against the resolved **project path or numeric ID**, e.g. `group/production-app` |
+| Database writes | `providers.database.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Any statement not matching `/^\s*SELECT/i` counts as a write |
+| Redis writes | `providers.redis.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
+| GitLab writes | `providers.gitlab.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `gitlab_create_note` |
+| Database / Redis blocked identifiers | `providers.<provider>.security.blocked_env` → `security.blocked_env` | Case-insensitive substring match against the **connection name** — not the DSN |
+| GitLab blocked identifiers | `providers.gitlab.security.blocked_env` → `security.blocked_env` | GitLab has no environment concept, so the list is matched against the resolved **project path or numeric ID**, e.g. `group/production-app` |
+
+There is no per-connection flag. A connection is protected by naming it in its
+provider's `blocked_env`; that is the only per-connection control.
+
+Because `blocked_env` is a substring match, a GitLab project path that merely
+contains `prod` is blocked by the built-in default. Set a provider-scoped list when
+a project name happens to contain a blocked word.
 
 ### Reserved keys
 
@@ -232,16 +234,25 @@ Only one declared key is still inert:
 | :--- | :--- |
 | `codegraph` | **Not read.** Reserved for future codegraph tooling. |
 
-#### Why `allow_write` does not mean the same thing everywhere
+### Migrating from 0.1.x
 
-`database.security.allow_write` is a **grant**: absent means deny, so a missing or
-misspelled block fails closed. GitLab and Redis use the same key as a **kill
-switch**: absent means allow, and only an explicit `false` blocks.
+`allow_write` used to be a **kill switch** for GitLab and Redis (absent meant
+allowed) and a **grant** for the database. It is now a grant everywhere, and
+`readonly` is gone. Both changes are breaking.
 
-The asymmetry is deliberate. Both providers were already writable before the key
-existed (`readonly: false` on a Redis connection, a GitLab token), so denying by
-default would have broken every existing configuration. To disable writes set
-`allow_write: false`; to allow them, omit the block or set `true`.
+| Old | New |
+| :--- | :--- |
+| `providers.{gitlab,redis}.security.allow_write: false` (opt-out) | `security.allow_write: true` (opt-in). GitLab and Redis writes are **blocked** until a config grants them |
+| `providers.database.security.allow_write: true` | unchanged |
+| `security.execute_query.{allow_write,blocked_env}` | `security.{allow_write,blocked_env}` — the old path still works for one release |
+| `redis.connections.<name>.readonly: false` (allowed writes) | `security.allow_write: true`, and keep the connection out of `blocked_env` |
+| `redis.connections.<name>.readonly: true` (blocked writes) | add the connection name to `blocked_env` |
+| `database.connections.<name>.readonly` | ignored before, removed now — it never gated anything |
+| `providers.gitlab.security.blocked_env: []` | GitLab now inherits the shared list, so path matching applies unless you override it |
+
+Because a newly added connection is writable as soon as its provider is granted,
+the grant plus `blocked_env` are the whole protection — there is no per-connection
+fail-safe any more.
 
 Credentials are never logged or returned in tool responses; `show_config` and
 `providers_info` report only `token_configured` / `auth_configured` booleans.
@@ -295,9 +306,9 @@ Caveats:
 
 The `config_init` tool scaffolds a starter file. It writes:
 
-- `id_generator.default` (from `--idGenerator`, default `ulid`)
-- `providers.database` with `enabled`, `default_engine`, `connections`, and a
-  `security.allow_write: false` block
+- an `id_generator.default` (from `--idGenerator`, default `ulid`)
+- a top-level `security` block with `allow_write: false` and
+  `blocked_env: [production, prod]`
 - `providers.gitlab` with `enabled`, `url`, `token`, `projectId`
 - `providers.redis` with `enabled`, `default_connection`, `connections`
 
@@ -305,10 +316,12 @@ Known limits:
 
 - Redis connections are always written **standalone** — sentinel config,
   `master_name`, sentinel TLS, and `username`/`password` cannot be generated.
-- Only the `database` provider gets a `security` block, emitted as
-  `allow_write: false` to match that provider's deny-by-default semantics. No
-  block is written for GitLab or Redis, whose `allow_write` is a kill switch —
-  emitting `false` there would disable writes in a freshly scaffolded config.
+- The write policy is written **once**, at the top level. No provider-scoped
+  `security` block is emitted, because the shared one already applies to all three
+  providers — narrow it with a provider block when one needs different rules.
+- The scaffolded file therefore denies every write tool. Set `allow_write: true`
+  in the shared block, or in one provider's block, to enable them.
+- No connection carries a `readonly` flag: that key is gone.
 - `codegraph` and the legacy top-level keys are never emitted.
 - It refuses to run when `.devtools/config.yaml` already exists.
 

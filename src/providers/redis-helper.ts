@@ -4,7 +4,6 @@ import {
   findBlockedEnvironment,
   isProviderEnabled,
   resolveAllowWrite,
-  resolveBlockedEnvs,
 } from "../core/security.js";
 
 const getRedisConfig = (config: Config) =>
@@ -20,39 +19,28 @@ const assertEnabled = (config: Config) => {
 
 /**
  * Check whether writes are allowed on the given connection.
- * Throws an error if the connection is read-only or the environment is blocked.
+ * Throws unless the provider grants writes and the connection name is not blocked.
  */
 export const assertWriteAllowed = (
   config: Config,
   connectionName: string,
 ): void => {
   const redis = getRedisConfig(config);
-  const connConfig = redis?.connections?.[connectionName];
-  if (!connConfig) {
+  if (!redis?.connections?.[connectionName]) {
     throw new Error(`Redis connection "${connectionName}" not found.`);
   }
 
-  // Layer 1: provider-wide kill switch
   if (!resolveAllowWrite(config, "redis")) {
     throw new Error(
-      "Write operations are disabled for the Redis provider. " +
-        "Set `providers.redis.security.allow_write: true` in .devtools/config.yaml to enable writes.",
+      "Redis writes are disabled. Set `providers.redis.security.allow_write: true` " +
+        "(or the shared `security.allow_write`) in .devtools/config.yaml to enable them.",
     );
   }
 
-  // Layer 2: readonly flag
-  if (connConfig.readonly !== false) {
-    throw new Error(
-      `Write operations are blocked on connection "${connectionName}". ` +
-        `Set \`redis.connections.${connectionName}.readonly: false\` in devtools.config.yaml to enable writes.`,
-    );
-  }
-
-  // Layer 3: blocked environment names
   const blockedEnv = findBlockedEnvironment(config, "redis", connectionName);
   if (blockedEnv) {
     throw new Error(
-      `Write operations are blocked on "${connectionName}" — environment name matches blocked list (${resolveBlockedEnvs(config, "redis").join(", ")}).`,
+      `Write operations are blocked on "${connectionName}" — it matches the blocked_env entry "${blockedEnv}".`,
     );
   }
 };

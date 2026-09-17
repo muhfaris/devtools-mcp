@@ -15,6 +15,14 @@ const referenceTemplate = `# DevTools MCP - Configuration
 
 id_generator:
   default: ulid
+
+# Write policy. Denied by default: allow_write is a grant, so only true enables the
+# write tools (execute_query, redis set/delete/expire, gitlab_create_note).
+# blocked_env is matched against the connection name, or the GitLab project path.
+# A providers.<provider>.security block overrides these for one provider.
+security:
+  allow_write: false
+  blocked_env: [production, prod]
 `;
 
 const minimalTemplate = `id_generator:
@@ -42,12 +50,10 @@ const listConnections = (
     const fields: string[] = [`${name}:`];
     if (type === "database") {
       fields.push(`  dsn: ${q(entry.dsn ?? "")}`);
-      fields.push(`  readonly: ${entry.readonly ?? true}`);
       if (entry.pool_size) fields.push(`  pool_size: ${entry.pool_size}`);
       if (entry.timeout) fields.push(`  timeout: ${entry.timeout}`);
     } else {
       fields.push(`  url: ${q(entry.url ?? "")}`);
-      fields.push(`  readonly: ${entry.readonly ?? true}`);
       if (entry.db !== undefined) fields.push(`  db: ${entry.db}`);
       if (entry.timeout) fields.push(`  timeout: ${entry.timeout}`);
     }
@@ -65,7 +71,7 @@ export const configInitTool: Tool = {
       type: "array",
       optional: true,
       description:
-        'Array of database connections: [{ name, dsn, engine?, readonly?, pool_size?, timeout? }]',
+        "Array of database connections: [{ name, dsn, engine?, pool_size?, timeout? }]",
     },
     gitlab: {
       type: "object",
@@ -77,7 +83,7 @@ export const configInitTool: Tool = {
       type: "array",
       optional: true,
       description:
-        'Array of Redis connections: [{ name, url, db?, readonly?, timeout? }]',
+        "Array of Redis connections: [{ name, url, db?, timeout? }]",
     },
     idGenerator: {
       type: "string",
@@ -133,9 +139,7 @@ export const configInitTool: Tool = {
 ${yamlJoin(
       listConnections(db, "database")?.split("\n") ?? [],
       4,
-    )}
-    security:
-      allow_write: false`);
+    )}`);
     }
     if (gitlab) {
       providerBlocks.push(
@@ -153,9 +157,8 @@ ${yamlJoin(
       );
     }
     if (redis?.length) {
-      // No `security` block: `providers.redis.security.allow_write` is a kill switch
-      // that only blocks when explicitly false, so emitting it would disable writes
-      // in a freshly scaffolded config.
+      // No provider-scoped `security` block: the shared one above sets the policy
+      // for every provider, so a per-provider copy would only be noise.
       providerBlocks.push(`  redis:
     enabled: true
     default_connection: ${

@@ -35,9 +35,8 @@ describe("providers_info", () => {
           connections: {
             primary: {
               dsn: "postgresql://admin:db-secret@localhost:5432/app_db",
-              readonly: true,
             },
-            malformed: { dsn: "not a dsn", readonly: true },
+            malformed: { dsn: "not a dsn" },
           },
         },
         gitlab: {
@@ -83,7 +82,8 @@ describe("providers_info", () => {
     expect(result.redis).toEqual({
       enabled: true,
       default_connection: "cache",
-      security: { allow_write: true, blocked_env: ["production", "prod"] },
+      // Denied by default: this config grants nothing, so writes are off.
+      security: { allow_write: false, blocked_env: ["production", "prod"] },
       connections: {
         cache: {
           mode: "standalone",
@@ -95,7 +95,6 @@ describe("providers_info", () => {
           auth_configured: true,
           sentinel_auth_configured: false,
           db: null,
-          readonly: true,
           timeout: null,
         },
       },
@@ -113,7 +112,7 @@ describe("providers_info", () => {
         database: {
           default_engine: "mysql",
           connections: {
-            dev: { dsn: "mysql://localhost/dev", readonly: true },
+            dev: { dsn: "mysql://localhost/dev" },
           },
         },
       };
@@ -132,8 +131,8 @@ describe("providers_info", () => {
       database: {
         default_engine: "postgresql",
         connections: {
-          first: { dsn: "postgresql://localhost/first_db", readonly: true },
-          second: { dsn: "postgresql://localhost/second_db", readonly: true },
+          first: { dsn: "postgresql://localhost/first_db" },
+          second: { dsn: "postgresql://localhost/second_db" },
         },
       },
     };
@@ -167,7 +166,7 @@ describe("providers_info", () => {
         database: {
           default_engine: "mariadb",
           connections: {
-            dev: { dsn: "mariadb://localhost/app", readonly: true },
+            dev: { dsn: "mariadb://localhost/app" },
           },
         },
       };
@@ -187,7 +186,7 @@ describe("providers_info", () => {
           enabled: false,
           default_engine: "postgresql",
           connections: {
-            dev: { dsn: "postgresql://localhost/app", readonly: true },
+            dev: { dsn: "postgresql://localhost/app" },
           },
         },
       },

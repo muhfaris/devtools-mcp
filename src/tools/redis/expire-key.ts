@@ -4,7 +4,7 @@ import { withRedisWrite } from "../../providers/redis-helper.js";
 export const redisExpireKeyTool: Tool = {
   name: "redis_expire_key",
   description:
-    "Set, update, or remove the TTL of a Redis key (requires connection with readonly: false)",
+    "Set, update, or remove the TTL of a Redis key (requires providers.redis.security.allow_write)",
   params: {
     connection: {
       type: "string",

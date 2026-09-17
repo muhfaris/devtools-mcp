@@ -4,7 +4,7 @@ import { withRedisWrite } from "../../providers/redis-helper.js";
 export const redisDeleteKeyTool: Tool = {
   name: "redis_delete_key",
   description:
-    "Delete one or more Redis keys (requires connection with readonly: false and explicit confirmation)",
+    "Delete one or more Redis keys (requires providers.redis.security.allow_write and explicit confirmation)",
   params: {
     connection: {
       type: "string",

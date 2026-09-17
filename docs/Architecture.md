@@ -262,12 +262,22 @@ sequenceDiagram
 
 ## Security model
 
+### Write control (all providers)
+
+| Feature | Implementation |
+| :--- | :--- |
+| Denied by default | A write tool runs only when `providers.<provider>.security.allow_write` or the shared `security.allow_write` is `true` |
+| One meaning everywhere | `allow_write` is a **grant** for database, GitLab, and Redis alike — absent means deny, so a missing or misspelled block fails closed |
+| Production blocking | Writes rejected when the identifier matches `blocked_env` (case-insensitive substring); defaults to `production`, `prod` |
+| Identifiers | The **connection name** for database and Redis — not the DSN — and the resolved **project path or ID** for GitLab |
+| Per-connection control | There is none by design: protect a connection by naming it in its provider's `blocked_env` |
+| Resolution | `providers.<provider>.security.X` ?? `security.X` ?? (deprecated `security.execute_query.X`) ?? default |
+
 ### Database
 
 | Feature | Implementation |
 | :--- | :--- |
-| Read-only by default | `execute_query` blocks writes unless `providers.database.security.allow_write: true` |
-| Production blocking | Writes rejected when the **connection name** matches `blocked_env`; defaults to `production`, `prod` |
+| Read-only by default | `execute_query` blocks any statement not matching `/^\s*SELECT/i` until writes are granted |
 | No credential leaks | DSN values never logged |
 | Connection limits | `pool_size` limits concurrent connections |
 
@@ -275,18 +285,17 @@ sequenceDiagram
 
 | Feature | Implementation |
 | :--- | :--- |
-| Token security | Tokens from env vars, never hardcoded |
+| Token security | Tokens from env vars, or supplied at runtime by `gitlab_set_config` |
 | No token echo | Tokens never appear in responses |
-| Write kill switch | `gitlab_create_note` is blocked by `providers.gitlab.security.allow_write: false` (opt-in: absent means allowed) |
-| Project blocking | `providers.gitlab.security.blocked_env` matched against the resolved project path or ID |
+| Write gate | `gitlab_create_note` is denied until writes are granted |
+| Project blocking | `blocked_env` matched against the resolved project path or ID; GitLab inherits the shared list |
 | Rate limiting | Respects GitLab API limits |
 
 ### Redis
 
 | Feature | Implementation |
 | :--- | :--- |
-| Per-connection read-only | `connections.<name>.readonly` must be exactly `false` for write tools |
-| Write kill switch | `providers.redis.security.allow_write: false` blocks all writes (opt-in: absent means allowed) |
+| Write gate | `redis_set_key`, `redis_delete_key`, and `redis_expire_key` are denied until writes are granted |
 | Environment blocking | `blocked_env` matched against the connection name; defaults to `production`, `prod` |
 
 ### Configuration

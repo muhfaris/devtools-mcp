@@ -18,11 +18,9 @@ describe("show_config", () => {
           connections: {
             dev: {
               dsn: "mariadb://dev:secret@localhost:3306/app?ssl=true",
-              readonly: false,
             },
             staging: {
               dsn: "mariadb://stage:secret@db.example.com/app?password=hidden&access_token=also-hidden&ssl=true",
-              readonly: true,
             },
           },
         },
@@ -34,7 +32,8 @@ describe("show_config", () => {
         },
       },
       security: {
-        execute_query: { allow_write: false, blocked_env: ["production"] },
+        allow_write: true,
+        blocked_env: ["production"],
       },
     };
 
@@ -53,8 +52,30 @@ describe("show_config", () => {
       enabled: true,
       url: "https://gitlab.example.com",
       projectId: 42,
-      security: { allow_write: true, blocked_env: [] },
+      security: { allow_write: true, blocked_env: ["production"] },
       token_configured: true,
+    });
+    // One chain serves every provider, so the shared grant reaches the database too.
+    expect(result.database.security).toEqual({
+      allow_write: true,
+      blocked_env: ["production"],
+    });
+    expect(result.security).toEqual({ allow_write: true, blocked_env: ["production"] });
+  });
+
+  it("echoes an unset shared block and the per-provider default", async () => {
+    (global as any).__devtools_config = {
+      providers: {
+        redis: { enabled: true, connections: { dev: { url: "redis://localhost" } } },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, {});
+
+    expect(result.security).toEqual({ allow_write: null, blocked_env: null });
+    expect(result.redis.security).toEqual({
+      allow_write: false,
+      blocked_env: ["production", "prod"],
     });
   });
 
@@ -67,7 +88,6 @@ describe("show_config", () => {
           connections: {
             [name]: {
               dsn: "postgresql://user:pass@localhost/app",
-              readonly: true,
             },
           },
         },
@@ -85,7 +105,6 @@ describe("show_config", () => {
         connections: {
           "dev-production": {
             dsn: "postgresql://user:pass@host/app",
-            readonly: true,
           },
         },
       },
@@ -107,7 +126,6 @@ describe("show_config", () => {
             dev: {
               url: "redis://:dev-secret@localhost:6379/2",
               db: 2,
-              readonly: true,
               timeout: 5000,
             },
             "sentinel-prod": {
@@ -137,7 +155,6 @@ describe("show_config", () => {
       master_name: null,
       role: null,
       db: 2,
-      readonly: true,
       timeout: 5000,
       auth_configured: true,
     });
@@ -152,7 +169,6 @@ describe("show_config", () => {
       auth_configured: true,
       sentinel_auth_configured: true,
       db: null,
-      readonly: true,
       timeout: null,
     });
 
