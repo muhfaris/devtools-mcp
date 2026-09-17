@@ -260,6 +260,25 @@ The watcher is armed at server start and re-armed whenever a config is created o
 discovered (`config_init`, `reload_config`). It is `unref()`ed, so it never keeps the
 process alive — one-shot CLI commands exit normally.
 
+It watches the containing `.devtools/` **directory**, not the file, and filters by
+basename. `fs.watch` on a file follows the inode, so a rename-replace save (vim with
+`backupcopy=no`, several IDEs) would leave the watcher attached to the old inode and
+silently stop live reload for the rest of the session.
+
+### What a reload does and does not rebuild
+
+| Thing | On reload |
+| :--- | :--- |
+| Runtime store (`__devtools_config`) | Replaced with the file's content |
+| Session overrides from `gitlab_set_config` / `database_set_connection` | **Discarded** — they live in the runtime store, so the file wins |
+| GitLab client | Rebuilt when `url`, `token` or `projectId` changed, cleared when the config is removed or `enabled: false` |
+| Database and Redis connections | Nothing to do — a fresh connection is constructed per call, so none hold stale state |
+
+GitLab is the only provider with a cached client, so it is the only one that needs
+rebuilding. `getGitLabClient()` fingerprints the config it was built from, which makes
+this work for every path — the watcher, `reload_config`, `config_init`, and a token
+supplied at runtime by `gitlab_set_config`.
+
 Caveats:
 
 1. If no `.devtools/config.yaml` exists at startup there is nothing to watch yet. Run
@@ -269,6 +288,8 @@ Caveats:
    recorded as `runtime.reloadError` in `show_config`.
 3. The watcher follows the resolved path: if the file moves and a later reload picks up
    the new location, the watcher is re-pointed at it.
+4. Directory events for siblings in `.devtools/` are ignored by basename; when a
+   platform reports no filename the server reloads conservatively (debounced).
 
 ## `config_init` output
 
@@ -297,6 +318,7 @@ Known limits:
 | :--- | :--- |
 | Discovery, parsing, `${VAR}` resolution | `src/core/config.ts` |
 | Types (`Config`, `ProvidersConfig`, provider configs) | `src/core/types.ts` |
+| GitLab client build + freshness fingerprint | `src/providers/gitlab.ts` |
 | Runtime store, load state, reload errors | `src/core/runtime-config.ts` |
 | Write/blocked-env policy resolution | `src/core/security.ts` |
 | Watcher, boot sequence | `src/index.ts` |

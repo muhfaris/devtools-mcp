@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearGitLab,
+  getGitLabClient,
   getGitLabWebUrl,
   initGitLab,
   parseGitLabUrl,
   resolveMrId,
   resolveProjectId,
 } from "../../../src/providers/gitlab.js";
+import { gitlabSetConfigTool } from "../../../src/tools/gitlab/set-config.js";
 import { ToolError } from "../../../src/core/errors.js";
 
 describe("providers/gitlab", () => {
@@ -146,5 +148,104 @@ describe("providers/gitlab", () => {
     expect(getGitLabWebUrl(config as any, "group/project")).toBe(
       "https://gitlab.example.com/group/project",
     );
+  });
+
+  describe("client freshness", () => {
+    const originalConfig = (global as any).__devtools_config;
+
+    const useConfig = (config: any) => {
+      (global as any).__devtools_config = config;
+    };
+
+    const providersShape = (gitlab: Record<string, unknown>) => ({
+      providers: {
+        gitlab: { url: "https://gitlab.com", token: "token-a", ...gitlab },
+      },
+    });
+
+    afterEach(() => {
+      (global as any).__devtools_config = originalConfig;
+    });
+
+    it("reuses the cached client when the config is unchanged", () => {
+      useConfig(providersShape({}));
+
+      const first = getGitLabClient();
+      const second = getGitLabClient();
+
+      expect(second).toBe(first);
+    });
+
+    it("rebuilds the client when the token changes", () => {
+      useConfig(providersShape({ token: "token-a" }));
+      const first = getGitLabClient();
+
+      useConfig(providersShape({ token: "token-b" }));
+      const second = getGitLabClient();
+
+      expect(second).not.toBe(first);
+    });
+
+    it("rebuilds the client when the url changes", () => {
+      useConfig(providersShape({ url: "https://gitlab.com" }));
+      const first = getGitLabClient();
+
+      useConfig(providersShape({ url: "https://gitlab.example.com" }));
+      const second = getGitLabClient();
+
+      expect(second).not.toBe(first);
+    });
+
+    it("reads the legacy top-level config too", () => {
+      useConfig({ gitlab: { url: "https://gitlab.com", token: "token-a" } });
+      const first = getGitLabClient();
+
+      useConfig({ gitlab: { url: "https://gitlab.com", token: "token-b" } });
+
+      expect(getGitLabClient()).not.toBe(first);
+    });
+
+    it("picks up a token supplied at runtime by gitlab_set_config", async () => {
+      // Mirrors the real flow: the config holds a placeholder that resolved to an
+      // empty string, so the token arrives later through the MCP tool.
+      useConfig({ gitlab: { url: "https://gitlab.com", token: "" } });
+      expect(() => getGitLabClient()).toThrowError(ToolError);
+
+      await gitlabSetConfigTool.execute({ token: "glpat-from-mcp" });
+
+      const client = getGitLabClient();
+      expect(client).toBeTruthy();
+      // A second call must not rebuild again — the fingerprint was recorded by
+      // gitlab_set_config's own initGitLab call.
+      expect(getGitLabClient()).toBe(client);
+    });
+
+    it("tears the client down when the config is removed", () => {
+      useConfig(providersShape({}));
+      expect(getGitLabClient()).toBeTruthy();
+
+      useConfig({});
+      expect(() => getGitLabClient()).toThrowError(
+        expect.objectContaining({ code: "CONFIG_REQUIRED" }),
+      );
+
+      // And a later config is not served by the torn-down client.
+      useConfig(providersShape({ token: "token-c" }));
+      expect(() => getGitLabClient()).not.toThrow();
+    });
+
+    it("clears the client when the provider is disabled, then rebuilds on re-enable", () => {
+      const enabled = providersShape({ enabled: true });
+      useConfig(enabled);
+      const first = getGitLabClient();
+
+      useConfig(providersShape({ enabled: false }));
+      expect(() => getGitLabClient()).toThrowError(
+        expect.objectContaining({ code: "CONFIG_REQUIRED" }),
+      );
+
+      useConfig(enabled);
+      expect(getGitLabClient()).not.toBe(first);
+    });
   });
 });

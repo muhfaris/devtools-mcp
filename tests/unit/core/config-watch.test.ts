@@ -46,19 +46,56 @@ describe("startConfigWatcher", () => {
     expect(getWatchedConfigPath()).toBeNull();
   });
 
-  it("watches the resolved path and unrefs the watcher", () => {
+  it("watches the containing directory and unrefs the watcher", () => {
     mockGetConfigPath.mockReturnValue("/project/.devtools/config.yaml");
 
     expect(startConfigWatcher()).toBe(true);
 
     const watcher = mockWatch.mock.results[0].value;
+    // The directory, not the file: a file watch follows the inode and dies on a
+    // rename-replace save.
     expect(mockWatch).toHaveBeenCalledWith(
-      "/project/.devtools/config.yaml",
+      "/project/.devtools",
       expect.any(Function),
     );
     // unref matters: a referenced watcher keeps one-shot CLI commands alive forever.
     expect(watcher.unref).toHaveBeenCalledOnce();
     expect(getWatchedConfigPath()).toBe("/project/.devtools/config.yaml");
+  });
+
+  it("ignores events for sibling files in the config directory", async () => {
+    vi.useFakeTimers();
+    mockGetConfigPath.mockReturnValue("/project/.devtools/config.yaml");
+    startConfigWatcher();
+
+    const onChange = mockWatch.mock.calls[0][1];
+    onChange("change", "notes.md");
+    onChange("rename", "other.yaml");
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(mockReload).not.toHaveBeenCalled();
+  });
+
+  it("reloads on a config rename, which is how an atomic save looks", async () => {
+    vi.useFakeTimers();
+    mockGetConfigPath.mockReturnValue("/project/.devtools/config.yaml");
+    startConfigWatcher();
+
+    mockWatch.mock.calls[0][1]("rename", "config.yaml");
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(mockReload).toHaveBeenCalledOnce();
+  });
+
+  it("reloads when the platform reports no filename", async () => {
+    vi.useFakeTimers();
+    mockGetConfigPath.mockReturnValue("/project/.devtools/config.yaml");
+    startConfigWatcher();
+
+    mockWatch.mock.calls[0][1]("change", null);
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(mockReload).toHaveBeenCalledOnce();
   });
 
   it("is idempotent for the same path", () => {

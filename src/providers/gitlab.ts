@@ -4,6 +4,26 @@ import type { Config } from "../core/types.js";
 
 let gitlabClient: Gitlab | null = null;
 let projectId: string | number | null = null;
+/**
+ * Identity of the configuration `gitlabClient` was built from. The client is rebuilt
+ * when this changes, so a config edit picked up by live reload — or a new token
+ * supplied through `gitlab_set_config` — takes effect without a server restart.
+ */
+let clientFingerprint: string | null = null;
+
+const gitlabConfig = (config: Config | undefined) =>
+  config?.providers?.gitlab ?? config?.gitlab;
+
+/**
+ * Value-based identity of a GitLab config. `projectId` is included so the module-level
+ * value behind `getProjectId()` cannot drift from the config either.
+ */
+const fingerprintOf = (
+  gitlab: { url?: string; token?: string; projectId?: string | number } | undefined,
+): string | null =>
+  gitlab
+    ? [gitlab.url ?? "", gitlab.token ?? "", gitlab.projectId ?? ""].join("\u0000")
+    : null;
 
 export type ParsedGitLabUrl = {
   host?: string;
@@ -76,28 +96,42 @@ export const initGitLab = (config: Config) => {
 
   gitlabClient = new Gitlab({ host: url || "https://gitlab.com", token });
   projectId = pid;
+  clientFingerprint = fingerprintOf(gitlab);
   return { client: gitlabClient, projectId };
 };
 
 export const clearGitLab = () => {
   gitlabClient = null;
   projectId = null;
+  clientFingerprint = null;
 };
 
 export const getGitLabClient = () => {
-  if (!gitlabClient) {
-    const config = (global as any).__devtools_config;
-    if (config?.providers?.gitlab?.enabled === false) {
-      throw new ToolError(
-        "CONFIG_REQUIRED",
-        "GitLab is disabled in configuration.",
-        "Enable providers.gitlab.enabled in .devtools/config.yaml, then retry this tool.",
-        true,
-        { configKey: "providers.gitlab.enabled" },
-      );
-    }
-    initGitLab(config);
+  const config = (global as any).__devtools_config;
+
+  if (config?.providers?.gitlab?.enabled === false) {
+    clearGitLab();
+    throw new ToolError(
+      "CONFIG_REQUIRED",
+      "GitLab is disabled in configuration.",
+      "Enable providers.gitlab.enabled in .devtools/config.yaml, then retry this tool.",
+      true,
+      { configKey: "providers.gitlab.enabled" },
+    );
   }
+
+  // The config can change underneath a long-running server: a file edit picked up by
+  // the watcher, config_init, reload_config, or gitlab_set_config supplying a token in
+  // place of the env-var placeholder. Rebuild rather than keep talking to a stale host
+  // with a stale token.
+  if (gitlabClient && fingerprintOf(gitlabConfig(config)) !== clientFingerprint) {
+    clearGitLab();
+  }
+
+  if (!gitlabClient) {
+    initGitLab(config ?? {});
+  }
+
   return gitlabClient;
 };
 
