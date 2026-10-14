@@ -35,16 +35,22 @@ describe("gitlab_search_code and pattern grep", () => {
     const gitlabMod = await import("../../../../src/providers/gitlab.js");
     gitlabMod.initGitLab((global as any).__devtools_config);
     const client = gitlabMod.getGitLabClient();
-    (client as any).Search = {
-      all: vi.fn().mockResolvedValue(mockSearchResults),
-    };
+    const searchAll = vi.fn().mockResolvedValue(mockSearchResults);
+    (client as any).Search = { all: searchAll };
 
     const res = await parseToolJson(gitlabSearchCodeTool, {
       search: "persistComplaintDeadline",
       ref: "main",
     });
 
+    // `perPage` alone bounds nothing in @gitbeaker: without `maxPages` it follows every
+    // `Link: next` until the result set ends.
+    expect(searchAll.mock.calls[0][2]).toMatchObject({
+      perPage: 20,
+      maxPages: 1,
+    });
     expect(res.totalFound).toBe(1);
+    expect(res.truncated).toBe(false);
     expect(res.results[0].filename).toContain("example_file.go");
   });
 

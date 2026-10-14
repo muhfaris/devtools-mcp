@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { parse } from "yaml";
 import { Config } from "./types.js";
+import { findIgnoredKeys, type IgnoredKey } from "./known-keys.js";
 import { config as dotenvConfig } from "dotenv";
 
 // Load .env file. `quiet` keeps dotenv@17's startup banner off stdout: the CLI's
@@ -24,6 +25,9 @@ export const loadConfig = async (): Promise<Config> => {
     dir = dirname(dir);
   }
   configPath = null;
+  // No file at all is a clean state, not a file with nothing usable in it: clear the
+  // findings so a reload after deleting the file does not keep reporting it.
+  reportIgnoredKeys([]);
   return {};
 };
 
@@ -49,6 +53,28 @@ export const CMD_TIMEOUT_MS = 5000;
 export type CmdKeyRecord = { key: string; resolved: boolean };
 
 let cmdKeys: CmdKeyRecord[] = [];
+
+let ignoredKeys: IgnoredKey[] = [];
+
+/**
+ * Config keys the last load did not recognise, and therefore did not read.
+ *
+ * Exposed so `show_config` can answer the question the file cannot: a key that looks like
+ * a guard but is not wired to anything. Reported on stderr as well, because a session
+ * that never calls `show_config` would otherwise never learn.
+ */
+export const getIgnoredKeys = (): IgnoredKey[] => [...ignoredKeys];
+
+const reportIgnoredKeys = (found: IgnoredKey[]): void => {
+  ignoredKeys = found;
+  for (const { key, hint } of found) {
+    console.warn(
+      `⚠️ ${key} is not a key this server reads, so it has no effect. ` +
+        (hint ??
+          "Remove it, or check docs/Configuration.md for the current spelling."),
+    );
+  }
+};
 
 /**
  * Whether `cmd:` values may run.
@@ -133,6 +159,8 @@ function readAndParse(candidate: string): Config {
   const content = readFileSync(candidate, "utf-8");
   const parsed = parse(content) as Config;
   cmdKeys = [];
+  // Scanned before resolution, so a key is reported exactly as the file spells it.
+  reportIgnoredKeys(findIgnoredKeys(parsed));
   return resolveValues(parsed, "");
 }
 
@@ -155,7 +183,10 @@ export const resolveValues = (
     // command. Env vars still expand *inside* the command body, in `runCmd`.
     if (!value.startsWith(CMD_PREFIX)) return expandEnvVars(value);
     if (!commandsEnabled) {
-      return skipCmd(keyPath, "its provider sets enabled: false, so it was not run.");
+      return skipCmd(
+        keyPath,
+        "its provider sets enabled: false, so it was not run.",
+      );
     }
     if (!isCmdAllowed()) {
       return skipCmd(

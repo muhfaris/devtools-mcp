@@ -7,11 +7,15 @@ import {
   resolveProjectId,
 } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
+import {
+  countChangedLines,
+  diffOmissionReason,
+} from "../../providers/gitlab-diff.js";
 
 export const gitlabReviewMrTool: Tool = {
   name: "gitlab_review_mr",
   description:
-    "Get full GitLab MR diffs, file analysis, and review suggestions for AI code review without needing a local git clone.",
+    "Get full GitLab MR diffs, file analysis, and review suggestions for AI code review without needing a local git clone. Files whose patch GitLab withheld past its size limits (too_large/collapsed/limit) are marked with diffOmitted and listed in filesNotReviewed; they are never counted as reviewed or reported as clean.",
   params: {
     mr_url: {
       type: "string",
@@ -79,11 +83,16 @@ export const gitlabReviewMrTool: Tool = {
 
       // Analyze each file
       const analyzedFiles = files.map((file: any) => {
-        const additions = file.additions || 0;
-        const deletions = file.deletions || 0;
+        // A file whose patch GitLab withheld cannot be reviewed: there is nothing to read.
+        // Marked rather than analyzed as an empty diff, which would present it as a
+        // low-complexity, issue-free file.
+        const diffOmitted = diffOmissionReason(file);
+        const reviewed = diffOmitted === null;
+        // The changes endpoint carries the patch, not per-file counts, so the counts come
+        // from the patch. A withheld patch leaves them unknown (`null`), never 0.
+        const additions = reviewed ? countChangedLines(file.diff, "+") : null;
+        const deletions = reviewed ? countChangedLines(file.diff, "-") : null;
         const language = detectLanguage(file.new_path || file.old_path);
-        const complexity = estimateComplexity(file.diff || "", language);
-        const suggestions = generateSuggestions(file.diff || "", language);
 
         return {
           file: file.new_path || file.old_path,
@@ -97,16 +106,38 @@ export const gitlabReviewMrTool: Tool = {
           additions,
           deletions,
           language,
-          complexity,
+          complexity: reviewed
+            ? estimateComplexity(file.diff || "", language)
+            : null,
+          reviewed,
+          diffOmitted,
           diff: file.diff || "",
-          suggestions,
+          suggestions: reviewed
+            ? generateSuggestions(file.diff || "", language)
+            : [],
         };
       });
+
+      // Every file in the MR whose patch GitLab withheld, listed once so the agent can
+      // fetch each with gitlab_get_file instead of assuming it has nothing to say.
+      const filesNotReviewed = allFiles
+        .map((file: any) => ({
+          file: file.new_path || file.old_path,
+          diffOmitted: diffOmissionReason(file),
+        }))
+        .filter((entry) => entry.diffOmitted !== null);
+
+      const filesReviewed = analyzedFiles.filter((f) => f.reviewed).length;
 
       // Generate summary
       let summary = "";
       if (params.include_summary !== false) {
-        summary = generateReviewSummary(analyzedFiles, mr);
+        summary = generateReviewSummary(
+          analyzedFiles,
+          mr,
+          filesNotReviewed,
+          allFiles.length,
+        );
       }
 
       const result = {
@@ -119,6 +150,8 @@ export const gitlabReviewMrTool: Tool = {
         },
         totalFiles: allFiles.length,
         filesShown: analyzedFiles.length,
+        filesReviewed,
+        filesNotReviewed,
         files: analyzedFiles,
         summary: summary,
         suggestion: `To review all ${allFiles.length} files, set max_files to a higher value.`,
@@ -222,14 +255,32 @@ function generateSuggestions(diff: string, language: string): string[] {
   return [...new Set(suggestions)];
 }
 
-function generateReviewSummary(files: any[], mr: any): string {
-  const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
-  const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
+function generateReviewSummary(
+  files: any[],
+  mr: any,
+  filesNotReviewed: { file: string; diffOmitted: string }[],
+  totalFiles: number,
+): string {
+  // Only files whose patch actually came back were reviewed. A file GitLab withheld is
+  // never counted here — not in the file count, not in the change totals, not in the
+  // complexity lists — because the review never saw its code.
+  const reviewedFiles = files.filter((f) => f.reviewed);
 
-  const highComplexity = files.filter((f) => f.complexity === "high");
-  const mediumComplexity = files.filter((f) => f.complexity === "medium");
+  const totalAdditions = reviewedFiles.reduce(
+    (sum, f) => sum + (f.additions || 0),
+    0,
+  );
+  const totalDeletions = reviewedFiles.reduce(
+    (sum, f) => sum + (f.deletions || 0),
+    0,
+  );
 
-  const allSuggestions = files.flatMap((f) =>
+  const highComplexity = reviewedFiles.filter((f) => f.complexity === "high");
+  const mediumComplexity = reviewedFiles.filter(
+    (f) => f.complexity === "medium",
+  );
+
+  const allSuggestions = reviewedFiles.flatMap((f) =>
     f.suggestions.map((s: string) => `\`${f.file}\`: ${s}`),
   );
 
@@ -240,9 +291,25 @@ function generateReviewSummary(files: any[], mr: any): string {
   summary += `- **URL:** ${mr.web_url}\n\n`;
 
   summary += `### Changes\n`;
-  summary += `- **Files:** ${files.length}\n`;
+  summary += `- **Files reviewed:** ${reviewedFiles.length} of ${totalFiles}\n`;
   summary += `- **Additions:** +${totalAdditions}\n`;
   summary += `- **Deletions:** -${totalDeletions}\n\n`;
+
+  // The files the review never read. Named one by one so the agent can fetch them with
+  // gitlab_get_file, and never counted as clean: "no issues found" must not cover code
+  // that was never seen.
+  if (filesNotReviewed.length > 0) {
+    const reasons = [
+      ...new Set(filesNotReviewed.map((f) => f.diffOmitted)),
+    ].join("/");
+    summary += `### ⚠️ Not Reviewed\n`;
+    summary += `${filesNotReviewed.length} of ${totalFiles} files were not reviewed: diff omitted by GitLab (${reasons}).\n`;
+    summary += `They are not covered by this review and must not be reported as clean. Read each with \`gitlab_get_file\` and review it separately.\n\n`;
+    for (const entry of filesNotReviewed) {
+      summary += `- \`${entry.file}\` (${entry.diffOmitted})\n`;
+    }
+    summary += `\n`;
+  }
 
   if (highComplexity.length > 0) {
     summary += `### ⚠️ High Complexity Files\n`;

@@ -2,21 +2,22 @@ import { Tool } from "../../core/types.js";
 import { createProvider } from "../../providers/index.js";
 import { ToolError } from "../../core/errors.js";
 import {
-  findBlockedEnvironment,
   isProviderEnabled,
-  resolveAllowWrite,
+  resolveConnectionWrite,
 } from "../../core/security.js";
 import { getProviderConfig } from "../../core/provider-config.js";
 import {
   databaseRequestError,
+  databaseWriteRefused,
   requireDatabaseConnection,
   requireQuery,
 } from "./errors.js";
+import { classifyStatement } from "./statement.js";
 
 export const executeQueryTool: Tool = {
   name: "execute_query",
   description:
-    "Execute a read-only SQL query against the database (SELECT only by default)",
+    "Execute a SQL statement against a configured database connection. A statement that is not a read runs only when every guard allows it: the provider grants writes (security.allow_write), the connection is not `readonly: true`, and its name does not match blocked_env. A readonly connection also opens its session read-only, so a write fails at the server even if it is not recognised here.",
   params: {
     connection: {
       type: "string",
@@ -27,7 +28,7 @@ export const executeQueryTool: Tool = {
     query: {
       type: "string",
       description:
-        "SQL query to execute (SELECT only unless write explicitly enabled in config)",
+        "SQL statement to execute. Reads run anywhere; writes need the provider's allow_write grant and a connection that is neither `readonly: true` nor blocked by blocked_env.",
     },
     params: {
       type: "array",
@@ -58,30 +59,23 @@ export const executeQueryTool: Tool = {
     const { connectionName, connection: connConfig } =
       requireDatabaseConnection(config, params.connection);
 
-    // Security: Check if write is allowed
+    // Security: classify the statement, then let one resolver decide. The previous test
+    // was "does it start with SELECT", which a leading `WITH` defeated.
     const query = requireQuery(params.query);
-    const isWrite = !/^\s*SELECT/i.test(query);
+    const isWrite = classifyStatement(query) === "write";
 
     if (isWrite) {
-      if (!resolveAllowWrite(config, "database")) {
-        throw new ToolError(
-          "DATABASE_WRITE_DISABLED",
-          "Database write queries are disabled.",
-          "Ask the user to enable providers.database.security.allow_write if this write is intentional, then retry this tool.",
-          true,
-          { configKey: "providers.database.security.allow_write" },
-        );
-      }
-      // The connection name is the environment signal: a blocked entry appearing
-      // anywhere in it (e.g. "production") blocks writes on that connection.
-      if (findBlockedEnvironment(config, "database", connectionName)) {
-        throw new ToolError(
-          "DATABASE_ENVIRONMENT_BLOCKED",
-          `Database writes are blocked for connection "${connectionName}".`,
-          "Choose an explicitly permitted configured connection; do not retry against this connection.",
-          false,
-          { parameter: "connection" },
-        );
+      // The connection name is the environment signal for `blocked_env`, while
+      // `readonly: true` is the connection's own word; both are decided in one place so
+      // this gate and `show_config` cannot describe the policy differently.
+      const policy = resolveConnectionWrite(
+        config,
+        "database",
+        connectionName,
+        connConfig.readonly,
+      );
+      if (!policy.can_write) {
+        throw databaseWriteRefused(policy, connectionName);
       }
     }
 

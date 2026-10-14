@@ -38,13 +38,17 @@ security:
 providers:
   database:
     enabled: true                     # only an explicit false disables
-    default_engine: postgresql        # postgresql | mysql | mariadb
+    default_engine: postgresql        # postgresql | mysql | mariadb (picks the driver;
+                                      # the server itself decides mysql vs mariadb)
     connections:
       dev:
         dsn: ${DEV_DATABASE_URL}
         pool_size: 10                 # optional
         timeout: 30000                # optional, ms — idle timeout
         connect_timeout: 10000        # optional, ms — how long to wait to connect
+      reporting:
+        dsn: ${REPORTING_DATABASE_URL}
+        readonly: true                # no writes here, whatever allow_write says
       prod:
         dsn: ${PROD_DATABASE_URL}     # no TLS parameters in the DSN
         ssl:
@@ -71,6 +75,7 @@ providers:
         timeout: 5000
       cache:
         url: redis://localhost:6379/1
+        readonly: true                # no writes here, whatever allow_write says
       sentinel-dev:
         sentinels:
           - host: 127.0.0.1
@@ -111,8 +116,11 @@ default on, configurable exclude path" — so the type exists to let a config be
 ahead of the tool. Nothing in `src/` reads it yet: setting `codegraph` has no effect
 today.
 
-Any other unknown top-level key is ignored silently — parsing is unvalidated, so
-typo'd keys fail quietly rather than erroring.
+Any other unknown key is **reported rather than ignored**. Parsing is still
+unvalidated, so a typo does not stop the server — but the load collects every key
+it does not recognise, warns about each on stderr, and lists them in `show_config`
+as `ignored_keys`. A key that looks like a guard and is not wired to anything is
+the one failure mode that never announces itself, so it is announced for you.
 
 ### Database connection fields
 
@@ -122,6 +130,7 @@ typo'd keys fail quietly rather than erroring.
 | `pool_size` | Maximum pooled connections (default `10`) |
 | `timeout` | **Idle** timeout in ms for a pooled connection (default `30000`) |
 | `connect_timeout` | How long to wait for a connection to be *established*, in ms (default `10000`). Without it a host that accepts TCP and then stalls would hold the tool call open indefinitely |
+| `readonly` | **Hard write deny for this connection**, outranking any `allow_write` grant. See [Per-connection `readonly`](#per-connection-readonly) |
 | `ssl` | TLS settings, applied on top of the DSN — see [TLS and the DSN](#tls-and-the-dsn) |
 
 #### `ssl`
@@ -187,6 +196,7 @@ A connection is either **standalone** (`url`) or **sentinel-backed**
 | `username` / `password` | both | AUTH for the data node (Redis 6+ ACL) |
 | `db` | both | Logical database index (default `0`) |
 | `timeout` | both | Socket/connect timeout in ms (default `5000`) |
+| `readonly` | both | **Hard write deny for this connection**, outranking any `allow_write` grant |
 
 Sentinel connections resolve the current master via the Sentinel nodes on every
 connect, so failovers are picked up automatically. `role: slave` resolves a
@@ -322,6 +332,8 @@ The exact expressions in code are:
 | :--- | :--- | :--- |
 | Database / GitLab / Redis config | `providers.<provider>` — no top-level fallback | — |
 | Database engine | `providers.database.default_engine` | `postgresql` |
+| Per-connection write deny | `providers.<provider>.connections.<name>.readonly`, never overridable | absent (writes follow the grant) |
+| Engine actually answering | `SELECT VERSION()` at connect, falling back to `default_engine` | — |
 | Provider enabled | `providers.<provider>.enabled` | enabled unless `false` |
 | Write gate (any provider) | `providers.<provider>.security.allow_write` ?? `security.allow_write` ?? `false` | `false` |
 | Blocked identifiers (any provider) | `providers.<provider>.security.blocked_env` ?? `security.blocked_env` ?? `[production, prod]` | `[production, prod]` |
@@ -338,9 +350,11 @@ Both security keys resolve through **one chain, for every provider**:
 - `security.execute_query.*` was the older home of these keys. It is **gone** — not
   deprecated, not aliased. Move the block up to `security.*`.
 
-A top-level `database`, `gitlab`, or `redis` block is **ignored**. It is not a legacy
+A top-level `database`, `gitlab`, or `redis` block is **not read**. It is not a legacy
 spelling: the only place a provider is read from is `providers.<provider>`, so a
-misplaced block leaves that provider unconfigured rather than half-working.
+misplaced block leaves that provider unconfigured rather than half-working. Every such
+block is reported by `show_config` under `ignored_keys`, with a hint naming where it
+belongs.
 
 ## Security model
 
@@ -350,14 +364,61 @@ misplaced block leaves that provider unconfigured rather than half-working.
 | :--- | :--- | :--- |
 | Provider kill switch | `providers.<provider>.enabled` | Only an explicit `false` disables |
 | Command values (`cmd:`) | `DEVTOOLS_ALLOW_CMD` — **environment**, not config | **Grant: denied by default.** It cannot be granted from a config file, because a cloned repository must not be able to author its own code execution. With the gate closed nothing runs and the value becomes `""` |
-| Database writes | `providers.database.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Any statement not matching `/^\s*SELECT/i` counts as a write |
+| Database writes | `providers.database.security.allow_write` → `security.allow_write` | **Grant: denied by default.** A statement is a write unless it opens with a read verb (`SELECT`, `SHOW`, `EXPLAIN`, `WITH`, ...) *and* contains no write verb outside its sub-queries — `WITH x AS (...) UPDATE ...` and `SELECT 1; DROP TABLE t` both count as writes |
 | Redis writes | `providers.redis.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
 | GitLab writes | `providers.gitlab.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
 | Database / Redis blocked identifiers | `providers.<provider>.security.blocked_env` → `security.blocked_env` | Case-insensitive substring match against the **connection name** — not the DSN |
 | GitLab blocked identifiers | `providers.gitlab.security.blocked_env` → `security.blocked_env` | GitLab has no environment concept, so the list is matched against the resolved **project path or numeric ID**, e.g. `group/production-app` |
+| Per-connection write deny | `providers.<provider>.connections.<name>.readonly` | **Deny: outranks the grant.** No value of `allow_write` permits a write here. Reported per connection by `show_config` as `write_policy` |
 
-There is no per-connection flag. A connection is protected by naming it in its
-provider's `blocked_env`; that is the only per-connection control.
+There are two per-connection controls, and they answer different questions.
+`blocked_env` is a name match: it protects a connection whose *name* mentions
+production. `readonly` is a statement: it protects a connection whose *data* is
+precious, whatever it happens to be called.
+
+#### Per-connection `readonly`
+
+```yaml
+providers:
+  database:
+    connections:
+      reporting:
+        dsn: ${REPORTING_DATABASE_URL}
+        readonly: true            # no writes, even under `security.allow_write: true`
+```
+
+`readonly: true` is enforced twice, because each layer covers what the other
+cannot:
+
+1. **The write gate.** `execute_query` classifies the statement and refuses a
+   write before it is sent, naming `readonly` as the reason
+   (`DATABASE_CONNECTION_READONLY`). The reminder at that point is the point: it
+   sends the reader to the line that is actually guarding the connection.
+2. **The session.** The connection is opened read-only —
+   `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` on PostgreSQL,
+   `SET SESSION TRANSACTION READ ONLY` on MySQL and MariaDB — so a write the
+   classifier could not see (a `CALL` into a function that writes, a statement it
+   guessed wrong) is refused by the server itself. If the setting cannot be
+   applied, the connection is **closed** rather than used: a guard that only
+   appears to hold is worse than none.
+
+For MySQL and MariaDB a read-only connection uses a single connection instead of a
+pool. `SET SESSION` is per-connection state and a pool hands every statement
+differently, so the setting would hold on one pooled connection and be missing
+from the next.
+
+Redis has no session-level equivalent, so a `readonly: true` Redis connection is
+enforced by the write tools alone.
+
+`show_config` answers the question directly for every connection:
+
+```json
+"write_policy": { "can_write": false, "denied_by": ["connection_readonly"], "detail": "dev" }
+```
+
+The reasons are `provider_disabled`, `connection_readonly`, `environment_blocked`,
+and `no_grant`. Every applicable reason is listed, most specific first, so a
+connection refused by several rules does not read as refused by only one.
 
 Because `blocked_env` is a substring match, a GitLab project path that merely
 contains `prod` is blocked by the built-in default. Set a provider-scoped list when
@@ -444,7 +505,8 @@ Known limits:
   providers — narrow it with a provider block when one needs different rules.
 - The scaffolded file therefore denies every write tool. Set `allow_write: true`
   in the shared block, or in one provider's block, to enable them.
-- No connection carries a `readonly` flag: that key is gone.
+- The scaffolded file emits no `readonly` flag. Add `readonly: true` to a connection
+  that must never be written to, whatever the grant says.
 - `codegraph` is never emitted, and no legacy top-level keys exist to emit.
 - It refuses to run when `.devtools/config.yaml` already exists.
 
@@ -456,7 +518,8 @@ Known limits:
 | Types (`Config`, `ProvidersConfig`, provider configs) | `src/core/types.ts` |
 | GitLab client build + freshness fingerprint | `src/providers/gitlab.ts` |
 | Runtime store, load state, reload errors | `src/core/runtime-config.ts` |
-| Write/blocked-env policy resolution | `src/core/security.ts` |
+| Write/blocked-env/readonly policy resolution | `src/core/security.ts` |
+| Known config keys, ignored-key findings | `src/core/known-keys.ts` |
 | Watcher, boot sequence | `src/index.ts` |
 | Watcher arming, debounce, re-targeting | `src/core/config-watch.ts` |
 | Database write/blocked-env gates | `src/tools/database/query.ts` |

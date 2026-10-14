@@ -1,4 +1,9 @@
-import { getCmdKeys, getConfigPath, isCmdAllowed } from "../../core/config.js";
+import {
+  getCmdKeys,
+  getConfigPath,
+  getIgnoredKeys,
+  isCmdAllowed,
+} from "../../core/config.js";
 import { getConfigRuntimeState } from "../../core/runtime-config.js";
 import type {
   Config,
@@ -6,7 +11,12 @@ import type {
   RedisConnectionConfig,
   Tool,
 } from "../../core/types.js";
-import { isProviderEnabled, resolveSecurity } from "../../core/security.js";
+import {
+  isProviderEnabled,
+  resolveConnectionWrite,
+  resolveSecurity,
+  type ConnectionWritePolicy,
+} from "../../core/security.js";
 import { getProviderConfig } from "../../core/provider-config.js";
 
 /**
@@ -36,6 +46,7 @@ const showConnection = (
   name: string,
   connection: ConnectionConfig,
   showCredentials: boolean,
+  writePolicy: ConnectionWritePolicy,
 ) => {
   const credentialsExposed =
     showCredentials && unmaskableConnectionNames.has(name.toLowerCase());
@@ -44,6 +55,13 @@ const showConnection = (
     pool_size: connection.pool_size ?? null,
     timeout: connection.timeout ?? null,
     connect_timeout: connection.connect_timeout ?? null,
+    // Stated, not implied: `write_policy` below says whether it is actually in force.
+    readonly: connection.readonly ?? false,
+    // The resolved answer to "can this connection be written to?", with the rules that
+    // refuse it. A provider-level `allow_write: true` is a grant, not a permission: it is
+    // reported next to the connection because that is where the reader is looking when
+    // they wonder whether a write will land.
+    write_policy: writePolicy,
     // Paths only: the certificate itself is read at connect time and never held here, so
     // reporting where it lives cannot disclose it.
     ssl: connection.ssl
@@ -77,6 +95,7 @@ const showRedisConnection = (
   name: string,
   connection: RedisConnectionConfig,
   showCredentials: boolean,
+  writePolicy: ConnectionWritePolicy,
 ) => {
   const credentialsExposed =
     showCredentials && unmaskableConnectionNames.has(name.toLowerCase());
@@ -105,6 +124,8 @@ const showRedisConnection = (
     ),
     db: connection.db ?? null,
     timeout: connection.timeout ?? null,
+    readonly: connection.readonly ?? false,
+    write_policy: writePolicy,
   };
 };
 
@@ -115,6 +136,7 @@ export const getSafeConfigView = (
   const db = getProviderConfig(config, "database");
   const gitlab = getProviderConfig(config, "gitlab");
   const redis = getProviderConfig(config, "redis");
+
   return {
     config_path: getConfigPath(),
     runtime: getConfigRuntimeState(),
@@ -122,6 +144,9 @@ export const getSafeConfigView = (
       enabled: isCmdAllowed(),
       values: getCmdKeys(),
     },
+    // Keys present in the file that nothing reads. Empty is the expected answer; anything
+    // here is a guard the author believes is armed, and is not.
+    ignored_keys: getIgnoredKeys(),
     id_generator: {
       default: config.id_generator?.default ?? null,
     },
@@ -131,10 +156,28 @@ export const getSafeConfigView = (
           default_engine: db.default_engine,
           security: resolveSecurity(config, "database"),
           connections: Object.fromEntries(
-            Object.entries(db.connections || {}).map(([name, connection]) => [
-              name,
-              showConnection(name, connection, showCredentials),
-            ]),
+            Object.entries(db.connections || {}).map(
+              ([name, connection]): [
+                string,
+                ReturnType<typeof showConnection>,
+              ] => [
+                name,
+                // `readonly` is the connection's own word and the grant is the
+                // provider's: one resolver decides both, so this view and the write gate
+                // cannot disagree about whether a write would land.
+                showConnection(
+                  name,
+                  connection,
+                  showCredentials,
+                  resolveConnectionWrite(
+                    config,
+                    "database",
+                    name,
+                    connection.readonly,
+                  ),
+                ),
+              ],
+            ),
           ),
         }
       : null,
@@ -153,10 +196,25 @@ export const getSafeConfigView = (
           default_connection: redis.default_connection ?? null,
           security: resolveSecurity(config, "redis"),
           connections: Object.fromEntries(
-            Object.entries(redis.connections || {}).map(([name, connection]) => [
-              name,
-              showRedisConnection(name, connection, showCredentials),
-            ]),
+            Object.entries(redis.connections || {}).map(
+              ([name, connection]): [
+                string,
+                ReturnType<typeof showRedisConnection>,
+              ] => [
+                name,
+                showRedisConnection(
+                  name,
+                  connection,
+                  showCredentials,
+                  resolveConnectionWrite(
+                    config,
+                    "redis",
+                    name,
+                    connection.readonly,
+                  ),
+                ),
+              ],
+            ),
           ),
         }
       : null,

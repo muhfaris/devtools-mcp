@@ -42,9 +42,9 @@ export const getDbSchemaTool: Tool = {
     const { connectionName, connection: connConfig } =
       requireDatabaseConnection(config, params.connection);
 
-    const engine =
-      getProviderConfig(config, "database")?.default_engine ?? "postgresql";
-    const provider = createProvider(engine);
+    const provider = createProvider(
+      getProviderConfig(config, "database")?.default_engine ?? "postgresql",
+    );
 
     const cacheKey = `${connectionName}:${params.table || "all"}`;
 
@@ -63,10 +63,11 @@ export const getDbSchemaTool: Tool = {
     try {
       await provider.connect(connConfig);
       const schema = await provider.introspect(params.table);
+      // The engine that answered, not the one the config named: `mariadb` and `mysql`
+      // share a config value, and knowing which one replied is what decides how to read
+      // the types below.
+      const engine = provider.getEngine();
       await provider.disconnect();
-
-      // Cache the result
-      schemaCache.set(cacheKey, { data: schema, timestamp: Date.now() });
 
       const result = {
         connection: connectionName,
@@ -76,6 +77,12 @@ export const getDbSchemaTool: Tool = {
         totalTables: schema.tables.length,
         totalRelationships: schema.relationships.length,
       };
+
+      // The assembled answer is what gets cached, not the raw introspection: caching the
+      // raw one made the second call a different shape from the first — same tables, no
+      // `engine`, no counts — so a reader could not tell the two responses apart from a
+      // truncated one.
+      schemaCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

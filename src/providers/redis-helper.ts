@@ -1,11 +1,7 @@
 import type { Config } from "../core/types.js";
 import { RedisProvider } from "./redis.js";
 import { getProviderConfig } from "../core/provider-config.js";
-import {
-  findBlockedEnvironment,
-  isProviderEnabled,
-  resolveAllowWrite,
-} from "../core/security.js";
+import { isProviderEnabled, resolveConnectionWrite } from "../core/security.js";
 
 const getRedisConfig = (config: Config) => getProviderConfig(config, "redis");
 
@@ -18,31 +14,45 @@ const assertEnabled = (config: Config) => {
 };
 
 /**
- * Check whether writes are allowed on the given connection.
- * Throws unless the provider grants writes and the connection name is not blocked.
+ * Check whether writes are allowed on the given connection, and refuse with the rule that
+ * refused it: a grant that does not exist and a connection marked `readonly` are fixed in
+ * two different places.
  */
 export const assertWriteAllowed = (
   config: Config,
   connectionName: string,
 ): void => {
   const redis = getRedisConfig(config);
-  if (!redis?.connections?.[connectionName]) {
+  const connection = redis?.connections?.[connectionName];
+  if (!connection) {
     throw new Error(`Redis connection "${connectionName}" not found.`);
   }
 
-  if (!resolveAllowWrite(config, "redis")) {
+  const policy = resolveConnectionWrite(
+    config,
+    "redis",
+    connectionName,
+    connection.readonly,
+  );
+  if (policy.can_write) return;
+
+  const reason = policy.denied_by[0];
+  if (reason === "connection_readonly") {
     throw new Error(
-      "Redis writes are disabled. Set `providers.redis.security.allow_write: true` " +
-        "(or the shared `security.allow_write`) in .devtools/config.yaml to enable them.",
+      `Connection "${connectionName}" is readonly: true in .devtools/config.yaml, ` +
+        "so writes are refused here regardless of any allow_write grant. Remove the flag if it was not meant to be a guard.",
+    );
+  }
+  if (reason === "environment_blocked") {
+    throw new Error(
+      `Write operations are blocked on "${connectionName}" — it matches the blocked_env entry "${policy.detail}".`,
     );
   }
 
-  const blockedEnv = findBlockedEnvironment(config, "redis", connectionName);
-  if (blockedEnv) {
-    throw new Error(
-      `Write operations are blocked on "${connectionName}" — it matches the blocked_env entry "${blockedEnv}".`,
-    );
-  }
+  throw new Error(
+    "Redis writes are disabled. Set `providers.redis.security.allow_write: true` " +
+      "(or the shared `security.allow_write`) in .devtools/config.yaml to enable them.",
+  );
 };
 
 export const withRedis = async <T>(

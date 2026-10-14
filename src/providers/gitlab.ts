@@ -20,10 +20,14 @@ const gitlabConfig = (config: Config | undefined) =>
  * value behind `getProjectId()` cannot drift from the config either.
  */
 const fingerprintOf = (
-  gitlab: { url?: string; token?: string; projectId?: string | number } | undefined,
+  gitlab:
+    | { url?: string; token?: string; projectId?: string | number }
+    | undefined,
 ): string | null =>
   gitlab
-    ? [gitlab.url ?? "", gitlab.token ?? "", gitlab.projectId ?? ""].join("\u0000")
+    ? [gitlab.url ?? "", gitlab.token ?? "", gitlab.projectId ?? ""].join(
+        "\u0000",
+      )
     : null;
 
 export type ParsedGitLabUrl = {
@@ -71,6 +75,31 @@ export const parseGitLabUrl = (input: string): ParsedGitLabUrl => {
     return {};
   }
 };
+
+/**
+ * Ask for one page, and no more.
+ *
+ * `@gitbeaker`'s list methods follow `Link: rel="next"` until the collection is
+ * exhausted — but only while **both** `perPage` and `maxPages` are set. Its own bound is
+ * `maxPages && perPage ? newAcc.length / perPage < maxPages : true`, which is `true`
+ * whenever `maxPages` is absent, so a caller that passes `perPage` alone receives every
+ * page of the collection. That is how `gitlab_get_commits` with `limit: 5` answered with
+ * 33,000 lines of a repository's history.
+ */
+export const boundedPage = (perPage: number, maxPages = 1) => ({
+  // 100 is GitLab's own ceiling for `per_page`; asking for more is silently ignored.
+  perPage: Math.max(1, Math.min(Math.trunc(perPage) || 1, 100)),
+  maxPages: Math.max(1, Math.trunc(maxPages) || 1),
+});
+
+/**
+ * Whether the answer was cut short.
+ *
+ * GitLab fills a page to `perPage` only when more items exist, so a full page is a
+ * truncation — and a silent one, unless it is reported.
+ */
+export const pageIsFull = (returned: number, perPage: number): boolean =>
+  returned >= perPage;
 
 export const initGitLab = (config: Config) => {
   const gitlab = getProviderConfig(config, "gitlab");
@@ -125,7 +154,10 @@ export const getGitLabClient = () => {
   // the watcher, config_init, reload_config, or gitlab_set_config supplying a token in
   // place of the env-var placeholder. Rebuild rather than keep talking to a stale host
   // with a stale token.
-  if (gitlabClient && fingerprintOf(gitlabConfig(config)) !== clientFingerprint) {
+  if (
+    gitlabClient &&
+    fingerprintOf(gitlabConfig(config)) !== clientFingerprint
+  ) {
     clearGitLab();
   }
 
@@ -169,8 +201,7 @@ export const resolveProjectId = (
   }
 
   const id =
-    params.project_id ??
-    getProviderConfig(config, "gitlab")?.projectId;
+    params.project_id ?? getProviderConfig(config, "gitlab")?.projectId;
   if (id === undefined || id === null || id === "") {
     throw createProjectIdRequiredError();
   }
@@ -192,9 +223,7 @@ export const resolveProjectId = (
 
 export const resolveMrId = (params: Record<string, unknown>): number => {
   const hasExplicitMrId =
-    params.mr_id !== undefined &&
-    params.mr_id !== null &&
-    params.mr_id !== "";
+    params.mr_id !== undefined && params.mr_id !== null && params.mr_id !== "";
   const explicitMrId = hasExplicitMrId ? Number(params.mr_id) : undefined;
 
   const rawUrl =

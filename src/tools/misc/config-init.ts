@@ -20,6 +20,7 @@ id_generator:
 # write tools (execute_query, redis set/delete/expire, gitlab_create_note).
 # blocked_env is matched against the connection name, or the GitLab project path.
 # A providers.<provider>.security block overrides these for one provider.
+# A connection carrying 'readonly: true' refuses writes whatever allow_write says.
 security:
   allow_write: false
   blocked_env: [production, prod]
@@ -52,6 +53,9 @@ const listConnections = (
       fields.push(`  dsn: ${q(entry.dsn ?? "")}`);
       if (entry.pool_size) fields.push(`  pool_size: ${entry.pool_size}`);
       if (entry.timeout) fields.push(`  timeout: ${entry.timeout}`);
+      // Emitted only when asked for: a scaffolded file should not appear to guard a
+      // connection that is in fact writable under a later grant.
+      if (entry.readonly === true) fields.push("  readonly: true");
     } else {
       fields.push(`  url: ${q(entry.url ?? "")}`);
       if (entry.db !== undefined) fields.push(`  db: ${entry.db}`);
@@ -71,19 +75,18 @@ export const configInitTool: Tool = {
       type: "array",
       optional: true,
       description:
-        "Array of database connections: [{ name, dsn, engine?, pool_size?, timeout? }]",
+        "Array of database connections: [{ name, dsn, pool_size?, timeout?, readonly? }]. The provider has one engine, so `engine` on the first entry becomes providers.database.default_engine and applies to every connection.",
     },
     gitlab: {
       type: "object",
       optional: true,
       description:
-        'GitLab config: { url?, token?, projectId?, tokenEnv? } where tokenEnv names a ${VAR} placeholder',
+        "GitLab config: { url?, token?, projectId?, tokenEnv? } where tokenEnv names a ${VAR} placeholder",
     },
     redis: {
       type: "array",
       optional: true,
-      description:
-        "Array of Redis connections: [{ name, url, db?, timeout? }]",
+      description: "Array of Redis connections: [{ name, url, db?, timeout? }]",
     },
     idGenerator: {
       type: "string",
@@ -94,7 +97,8 @@ export const configInitTool: Tool = {
     templatePath: {
       type: "string",
       optional: true,
-      description: "Optional absolute path to a reference config template to render",
+      description:
+        "Optional absolute path to a reference config template to render",
     },
   },
   execute: async (params) => {
@@ -132,14 +136,9 @@ export const configInitTool: Tool = {
     if (db?.length) {
       providerBlocks.push(`  database:
     enabled: true
-    default_engine: ${
-      db[0].engine ?? "postgresql"
-    }
+    default_engine: ${db[0].engine ?? "postgresql"}
     connections:
-${yamlJoin(
-      listConnections(db, "database")?.split("\n") ?? [],
-      4,
-    )}`);
+${yamlJoin(listConnections(db, "database")?.split("\n") ?? [], 4)}`);
     }
     if (gitlab) {
       providerBlocks.push(
@@ -161,14 +160,9 @@ ${yamlJoin(
       // for every provider, so a per-provider copy would only be noise.
       providerBlocks.push(`  redis:
     enabled: true
-    default_connection: ${
-      redis[0].name
-    }
+    default_connection: ${redis[0].name}
     connections:
-${yamlJoin(
-      listConnections(redis, "redis")?.split("\n") ?? [],
-      4,
-    )}`);
+${yamlJoin(listConnections(redis, "redis")?.split("\n") ?? [], 4)}`);
     }
 
     let content: string;
@@ -192,9 +186,13 @@ ${yamlJoin(
     writeFileSync(configPath, content.trimEnd() + "\n", "utf-8");
 
     const providers = [
-      ...(db?.length ? [{ provider: "database", connections: db.map((c) => c.name) }] : []),
+      ...(db?.length
+        ? [{ provider: "database", connections: db.map((c) => c.name) }]
+        : []),
       ...(gitlab ? [{ provider: "gitlab", connections: [] }] : []),
-      ...(redis?.length ? [{ provider: "redis", connections: redis.map((c) => c.name) }] : []),
+      ...(redis?.length
+        ? [{ provider: "redis", connections: redis.map((c) => c.name) }]
+        : []),
     ];
 
     const loaded = await loadConfig();

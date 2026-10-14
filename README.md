@@ -72,6 +72,14 @@ Tools that mutate — `execute_query`, `redis_set_key`, `redis_delete_key`,
 - `blocked_env` defaults to `[production, prod]` and substring-matches the
   connection or project name, so a production target stays blocked even when
   writes are enabled.
+- `readonly: true` on a connection is a **hard deny that outranks the grant**: no
+  value of `allow_write` lets a write through there. It is enforced twice — the tool
+  refuses the statement, and the session is opened read-only (`SET SESSION ... READ
+  ONLY`), so the server refuses whatever the tool did not recognise. `show_config`
+  reports the outcome per connection as `write_policy`.
+
+A config key nothing reads is reported rather than ignored: `show_config` lists it
+under `ignored_keys`, and the load warns about it on stderr.
 
 Command values follow the same rule. A config value prefixed `cmd:` runs that command and
 takes its stdout, and is denied until `DEVTOOLS_ALLOW_CMD=1` is in the environment the

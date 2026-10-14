@@ -5,6 +5,7 @@ import {
   isProviderEnabled,
   resolveAllowWrite,
   resolveBlockedEnvs,
+  resolveConnectionWrite,
   resolveSecurity,
 } from "../../../src/core/security.js";
 import type { Config } from "../../../src/core/types.js";
@@ -22,12 +23,20 @@ describe("isProviderEnabled", () => {
   });
 
   it.each(PROVIDERS)("only an explicit false disables %s", (provider) => {
-    expect(isProviderEnabled(config({ providers: { [provider]: {} } }), provider)).toBe(true);
     expect(
-      isProviderEnabled(config({ providers: { [provider]: { enabled: true } } }), provider),
+      isProviderEnabled(config({ providers: { [provider]: {} } }), provider),
     ).toBe(true);
     expect(
-      isProviderEnabled(config({ providers: { [provider]: { enabled: false } } }), provider),
+      isProviderEnabled(
+        config({ providers: { [provider]: { enabled: true } } }),
+        provider,
+      ),
+    ).toBe(true);
+    expect(
+      isProviderEnabled(
+        config({ providers: { [provider]: { enabled: false } } }),
+        provider,
+      ),
     ).toBe(false);
   });
 });
@@ -39,14 +48,17 @@ describe("resolveAllowWrite", () => {
 
   it.each(PROVIDERS)("grants %s from the provider-scoped block", (provider) => {
     expect(
-      resolveAllowWrite(providerScoped(provider, { allow_write: true }), provider),
+      resolveAllowWrite(
+        providerScoped(provider, { allow_write: true }),
+        provider,
+      ),
     ).toBe(true);
   });
 
   it.each(PROVIDERS)("grants %s from the shared block", (provider) => {
-    expect(resolveAllowWrite(config({ security: { allow_write: true } }), provider)).toBe(
-      true,
-    );
+    expect(
+      resolveAllowWrite(config({ security: { allow_write: true } }), provider),
+    ).toBe(true);
   });
 
   it.each(PROVIDERS)(
@@ -76,13 +88,22 @@ describe("resolveAllowWrite", () => {
 });
 
 describe("resolveBlockedEnvs", () => {
-  it.each(PROVIDERS)("falls back to the built-in default for %s", (provider) => {
-    expect(resolveBlockedEnvs(config({}), provider)).toEqual(DEFAULT_BLOCKED_ENVS);
-  });
+  it.each(PROVIDERS)(
+    "falls back to the built-in default for %s",
+    (provider) => {
+      expect(resolveBlockedEnvs(config({}), provider)).toEqual(
+        DEFAULT_BLOCKED_ENVS,
+      );
+    },
+  );
 
   it.each(PROVIDERS)("inherits the shared list for %s", (provider) => {
-    expect(resolveBlockedEnvs(config({ security: { blocked_env: ["staging"] } }), provider))
-      .toEqual(["staging"]);
+    expect(
+      resolveBlockedEnvs(
+        config({ security: { blocked_env: ["staging"] } }),
+        provider,
+      ),
+    ).toEqual(["staging"]);
   });
 
   it.each(PROVIDERS)(
@@ -95,7 +116,6 @@ describe("resolveBlockedEnvs", () => {
       expect(resolveBlockedEnvs(scoped, provider)).toEqual([]);
     },
   );
-
 });
 
 describe("resolveSecurity", () => {
@@ -127,11 +147,15 @@ describe("resolveSecurity", () => {
 
 describe("findBlockedEnvironment", () => {
   it("matches a blocked entry anywhere in the connection name", () => {
-    expect(findBlockedEnvironment(config({}), "database", "prod-replica")).toBe("prod");
+    expect(findBlockedEnvironment(config({}), "database", "prod-replica")).toBe(
+      "prod",
+    );
     expect(findBlockedEnvironment(config({}), "redis", "dev-production")).toBe(
       "production",
     );
-    expect(findBlockedEnvironment(config({}), "database", "dev")).toBeUndefined();
+    expect(
+      findBlockedEnvironment(config({}), "database", "dev"),
+    ).toBeUndefined();
   });
 
   it("matches case-insensitively on both sides", () => {
@@ -142,26 +166,112 @@ describe("findBlockedEnvironment", () => {
   });
 
   it("matches GitLab against the project path with the shared default list", () => {
-    expect(findBlockedEnvironment(config({}), "gitlab", "group/production-app")).toBe(
-      "production",
-    );
-    expect(findBlockedEnvironment(config({}), "gitlab", "group/product-catalog")).toBe(
-      "prod",
-    );
-    expect(findBlockedEnvironment(config({}), "gitlab", "group/billing")).toBeUndefined();
+    expect(
+      findBlockedEnvironment(config({}), "gitlab", "group/production-app"),
+    ).toBe("production");
+    expect(
+      findBlockedEnvironment(config({}), "gitlab", "group/product-catalog"),
+    ).toBe("prod");
+    expect(
+      findBlockedEnvironment(config({}), "gitlab", "group/billing"),
+    ).toBeUndefined();
   });
 
   it("honours an explicitly configured GitLab list", () => {
     const scoped = providerScoped("gitlab", { blocked_env: ["production"] });
-    expect(findBlockedEnvironment(scoped, "gitlab", "group/production-app")).toBe(
-      "production",
-    );
-    expect(findBlockedEnvironment(scoped, "gitlab", "group/product-catalog")).toBeUndefined();
+    expect(
+      findBlockedEnvironment(scoped, "gitlab", "group/production-app"),
+    ).toBe("production");
+    expect(
+      findBlockedEnvironment(scoped, "gitlab", "group/product-catalog"),
+    ).toBeUndefined();
   });
 
   it("handles non-string identifier and entry values without throwing", () => {
     const numeric = providerScoped("gitlab", { blocked_env: [42] });
-    expect(findBlockedEnvironment(numeric, "gitlab", 1420 as unknown as string)).toBe("42");
+    expect(
+      findBlockedEnvironment(numeric, "gitlab", 1420 as unknown as string),
+    ).toBe("42");
+  });
+});
+
+describe("resolveConnectionWrite", () => {
+  const granted = (extra: Record<string, unknown> = {}) =>
+    config({
+      security: { allow_write: true, blocked_env: ["prod"] },
+      providers: { database: { connections: { dev: { dsn: "x" } } } },
+      ...extra,
+    });
+
+  it("permits a writable connection under a grant", () => {
+    expect(resolveConnectionWrite(granted(), "database", "dev", false)).toEqual(
+      {
+        can_write: true,
+        denied_by: [],
+      },
+    );
+  });
+
+  it("lets readonly on the connection outrank the grant", () => {
+    // The finding this replaces: `readonly: true` sat in the config while every write went
+    // through, because nothing read the key. A connection that says readonly refuses the
+    // write even where the provider granted it.
+    expect(resolveConnectionWrite(granted(), "database", "dev", true)).toEqual({
+      can_write: false,
+      denied_by: ["connection_readonly"],
+      detail: "dev",
+    });
+  });
+
+  it("leaves readonly absent and readonly false alone", () => {
+    expect(
+      resolveConnectionWrite(granted(), "database", "dev", undefined).can_write,
+    ).toBe(true);
+    expect(
+      resolveConnectionWrite(granted(), "database", "dev", false).can_write,
+    ).toBe(true);
+  });
+
+  it("names the blocked_env entry that matched", () => {
+    expect(
+      resolveConnectionWrite(granted(), "database", "prod-db", false),
+    ).toEqual({
+      can_write: false,
+      denied_by: ["environment_blocked"],
+      detail: "prod",
+    });
+  });
+
+  it("reports every rule that denies, readonly first", () => {
+    const ungranted = config({
+      providers: { database: { connections: { "prod-db": { dsn: "x" } } } },
+    });
+
+    expect(
+      resolveConnectionWrite(ungranted, "database", "prod-db", true),
+    ).toEqual({
+      can_write: false,
+      denied_by: ["connection_readonly", "environment_blocked", "no_grant"],
+      detail: "prod-db",
+    });
+  });
+
+  it("denies with no_grant when nothing granted writes", () => {
+    expect(
+      resolveConnectionWrite(config({}), "gitlab", "group/app", false),
+    ).toEqual({ can_write: false, denied_by: ["no_grant"] });
+  });
+
+  it("denies when the provider is switched off, whatever the grant says", () => {
+    const off = config({
+      security: { allow_write: true },
+      providers: { redis: { enabled: false, connections: { dev: {} } } },
+    });
+
+    expect(resolveConnectionWrite(off, "redis", "dev", false)).toEqual({
+      can_write: false,
+      denied_by: ["provider_disabled"],
+    });
   });
 });
 

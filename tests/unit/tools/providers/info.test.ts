@@ -13,7 +13,9 @@ vi.mock("../../../../src/providers/redis.js", () => ({
 }));
 
 const mockedCreateProvider = createProvider as ReturnType<typeof vi.fn>;
-const mockedRedisProvider = RedisProvider as unknown as ReturnType<typeof vi.fn>;
+const mockedRedisProvider = RedisProvider as unknown as ReturnType<
+  typeof vi.fn
+>;
 const originalConfig = (global as any).__devtools_config;
 
 const provider = (overrides: Record<string, unknown> = {}) => ({
@@ -107,6 +109,8 @@ describe("providers_info", () => {
           sentinel_auth_configured: false,
           db: null,
           timeout: null,
+          readonly: false,
+          write_policy: { can_write: false, denied_by: ["no_grant"] },
           checked: false,
         },
       },
@@ -141,7 +145,9 @@ describe("providers_info", () => {
   it("checks every database connection and disconnects after success", async () => {
     const first = provider();
     const second = provider({ healthCheck: vi.fn().mockResolvedValue(false) });
-    mockedCreateProvider.mockReturnValueOnce(first as any).mockReturnValueOnce(second as any);
+    mockedCreateProvider
+      .mockReturnValueOnce(first as any)
+      .mockReturnValueOnce(second as any);
     (global as any).__devtools_config = {
       providers: {
         database: {
@@ -164,14 +170,12 @@ describe("providers_info", () => {
     expect(second.connect).toHaveBeenCalledWith(
       expect.objectContaining({ dsn: "postgresql://localhost/second_db" }),
     );
-    expect(result.database.connections.map((item: any) => item.healthy)).toEqual([
-      true,
-      false,
-    ]);
-    expect(result.database.connections.map((item: any) => item.checked)).toEqual([
-      true,
-      true,
-    ]);
+    expect(
+      result.database.connections.map((item: any) => item.healthy),
+    ).toEqual([true, false]);
+    expect(
+      result.database.connections.map((item: any) => item.checked),
+    ).toEqual([true, true]);
     expect(first.disconnect).toHaveBeenCalledOnce();
     expect(second.disconnect).toHaveBeenCalledOnce();
   });
@@ -206,7 +210,9 @@ describe("providers_info", () => {
     "names a reason when %s fails, without echoing the driver message",
     async (method) => {
       const failing = provider({
-        [method]: vi.fn().mockRejectedValue(new Error("probe could not complete")),
+        [method]: vi
+          .fn()
+          .mockRejectedValue(new Error("probe could not complete")),
       });
       mockedCreateProvider.mockReturnValue(failing as any);
       (global as any).__devtools_config = {
@@ -232,14 +238,16 @@ describe("providers_info", () => {
 
   it("turns a TLS failure into the CA hint an agent can act on", async () => {
     const failing = provider({
-      connect: vi.fn().mockRejectedValue(
-        Object.assign(
-          new Error(
-            "self-signed certificate in certificate chain for postgres://admin:hunter2@db.example.com:12273/db",
+      connect: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(
+            new Error(
+              "self-signed certificate in certificate chain for postgres://admin:hunter2@db.example.com:12273/db",
+            ),
+            { code: "SELF_SIGNED_CERT_IN_CHAIN" },
           ),
-          { code: "SELF_SIGNED_CERT_IN_CHAIN" },
         ),
-      ),
     });
     mockedCreateProvider.mockReturnValue(failing as any);
     (global as any).__devtools_config = {

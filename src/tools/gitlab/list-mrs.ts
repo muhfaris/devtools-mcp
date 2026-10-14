@@ -2,7 +2,12 @@ import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
 import { isProviderConfigured } from "../../core/provider-config.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import {
+  boundedPage,
+  getGitLabClient,
+  pageIsFull,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
 
 export const gitlabListMrsTool: Tool = {
   name: "gitlab_list_mrs",
@@ -92,7 +97,9 @@ export const gitlabListMrsTool: Tool = {
           labels: params.labels.split(",").map((l) => l.trim()),
         }),
         ...(params.search && { search: params.search }),
-        perPage: limit,
+        // One page of `limit`, not every page: `perPage` alone leaves @gitbeaker's page
+        // bound undefined, and it then walks the whole collection.
+        ...boundedPage(limit),
         sort: "desc",
         orderBy: "updated_at",
       });
@@ -117,6 +124,8 @@ export const gitlabListMrsTool: Tool = {
 
       const summary = {
         total: result.length,
+        limit,
+        truncated: pageIsFull(result.length, limit),
         state: state,
         mergeRequests: result,
       };

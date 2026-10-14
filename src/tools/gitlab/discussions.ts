@@ -3,7 +3,9 @@ import { ToolError } from "../../core/errors.js";
 import { isProviderConfigured } from "../../core/provider-config.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
 import {
+  boundedPage,
   getGitLabClient,
+  pageIsFull,
   resolveMrId,
   resolveProjectId,
 } from "../../providers/gitlab.js";
@@ -61,10 +63,13 @@ export const gitlabGetDiscussionsTool: Tool = {
     const mrId = resolveMrId(params);
 
     try {
-      // Get discussions
+      // One page of up to 100. Without `maxPages` this fetch had no bound at all, and a
+      // merge request with a long review history returned all of it.
+      const pageSize = 100;
       const discussions = await client.MergeRequestDiscussions.all(
         projectId,
         mrId,
+        boundedPage(pageSize),
       );
 
       const filtered = params.only_unresolved
@@ -78,6 +83,10 @@ export const gitlabGetDiscussionsTool: Tool = {
         unresolvedCount: discussions.filter(
           (d: any) => d.resolvable && !d.resolved,
         ).length,
+        // A full page means the answer stops at 100 discussions rather than at the end
+        // of them, which the counts above would otherwise imply was the end.
+        truncated: pageIsFull(discussions.length, pageSize),
+        pageSize,
         discussions: filtered.map((d: any) => ({
           id: d.id,
           resolvable: d.resolvable || false,

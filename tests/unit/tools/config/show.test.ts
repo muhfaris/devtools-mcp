@@ -114,7 +114,9 @@ describe("show_config", () => {
       staging: { dsn: "mariadb://stage:secret@db.example.com/app" },
     });
 
-    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+    const result = await parseToolJson(showConfigTool, {
+      show_credentials: true,
+    });
 
     expect(result.database.connections.dev).toMatchObject({
       dsn: "mariadb://mariadb:mariadb@localhost:3306/app",
@@ -131,7 +133,9 @@ describe("show_config", () => {
       dev: { dsn: "mariadb://mariadb:mariadb@localhost:3306/app" },
     });
 
-    const result = await parseToolJson(showConfigTool, { show_credentials: false });
+    const result = await parseToolJson(showConfigTool, {
+      show_credentials: false,
+    });
 
     expect(result.database.connections.dev).toMatchObject({
       dsn: "mariadb://***:***@localhost:3306/app",
@@ -142,7 +146,10 @@ describe("show_config", () => {
   it("reports the per-provider default when nothing grants writes", async () => {
     (global as any).__devtools_config = {
       providers: {
-        redis: { enabled: true, connections: { dev: { url: "redis://localhost" } } },
+        redis: {
+          enabled: true,
+          connections: { dev: { url: "redis://localhost" } },
+        },
       },
     };
 
@@ -176,7 +183,9 @@ describe("show_config", () => {
       "dev-production": { dsn: "postgresql://user:pass@host/app" },
     });
 
-    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+    const result = await parseToolJson(showConfigTool, {
+      show_credentials: true,
+    });
 
     expect(result.database.connections["dev-production"]).toMatchObject({
       dsn: "postgresql://***:***@host/app",
@@ -238,12 +247,99 @@ describe("show_config", () => {
       sentinel_auth_configured: true,
       db: null,
       timeout: null,
+      readonly: false,
+      // The name alone puts this connection behind two rules: it matches the built-in
+      // `prod` entry, and nothing granted writes in this fixture.
+      write_policy: {
+        can_write: false,
+        denied_by: ["environment_blocked", "no_grant"],
+        detail: "prod",
+      },
     });
 
     const serialized = JSON.stringify(result);
     expect(serialized).not.toMatch(
       /dev-secret|sentinel-pass|data-pass|sentinel-user|data-user/,
     );
+  });
+
+  it("says which connection may be written to, and why not", async () => {
+    (global as any).__devtools_config = {
+      security: { allow_write: true, blocked_env: ["prod"] },
+      providers: {
+        database: {
+          default_engine: "mariadb",
+          connections: {
+            dev: { dsn: "mariadb://dev:pw@localhost:3306/app" },
+            "dev-guarded": {
+              dsn: "mariadb://dev:pw@localhost:3306/app",
+              readonly: true,
+            },
+            "prod-replica": { dsn: "mariadb://dev:pw@localhost:3306/app" },
+          },
+        },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, {});
+    const connections = result.database.connections;
+
+    // The provider grant reaches all three, so the grant alone answers nothing.
+    expect(result.database.security.allow_write).toBe(true);
+    expect(connections.dev).toMatchObject({
+      readonly: false,
+      write_policy: { can_write: true, denied_by: [] },
+    });
+    expect(connections["dev-guarded"]).toMatchObject({
+      readonly: true,
+      write_policy: {
+        can_write: false,
+        denied_by: ["connection_readonly"],
+        detail: "dev-guarded",
+      },
+    });
+    expect(connections["prod-replica"].write_policy).toEqual({
+      can_write: false,
+      denied_by: ["environment_blocked"],
+      detail: "prod",
+    });
+  });
+
+  it("denies a Redis connection marked readonly", async () => {
+    (global as any).__devtools_config = {
+      security: { allow_write: true },
+      providers: {
+        redis: {
+          connections: {
+            dev: { url: "redis://localhost:6379" },
+            "dev-cache": { url: "redis://localhost:6379/1", readonly: true },
+          },
+        },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, {});
+
+    expect(result.redis.connections.dev.write_policy).toEqual({
+      can_write: true,
+      denied_by: [],
+    });
+    expect(result.redis.connections["dev-cache"]).toMatchObject({
+      readonly: true,
+      write_policy: { can_write: false, denied_by: ["connection_readonly"] },
+    });
+  });
+
+  it("reports an empty ignored_keys list when every key is read", async () => {
+    (global as any).__devtools_config = databaseConfig({
+      dev: { dsn: "mariadb://localhost:3306/app" },
+    });
+
+    const result = await parseToolJson(showConfigTool, {});
+
+    // Empty is the answer that means "nothing in your file is being ignored"; the list
+    // itself is asserted against a real file in tests/unit/core/known-keys.test.ts.
+    expect(result.ignored_keys).toEqual([]);
   });
 
   it("unmasks the development Redis URL only when show_credentials is set", async () => {
@@ -259,7 +355,9 @@ describe("show_config", () => {
       },
     };
 
-    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+    const result = await parseToolJson(showConfigTool, {
+      show_credentials: true,
+    });
 
     expect(result.redis.connections.dev.url).toBe(
       "redis://:dev-secret@localhost:6379/2",

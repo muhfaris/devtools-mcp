@@ -1,7 +1,12 @@
 import { Tool } from "../../core/types.js";
 import { ToolError } from "../../core/errors.js";
 import { isProviderConfigured } from "../../core/provider-config.js";
-import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
+import {
+  boundedPage,
+  getGitLabClient,
+  pageIsFull,
+  resolveProjectId,
+} from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
 
 export const gitlabSearchCodeTool: Tool = {
@@ -87,7 +92,9 @@ export const gitlabSearchCodeTool: Tool = {
         projectId,
         ...(params.ref && { ref: String(params.ref).trim() }),
         page,
-        perPage,
+        // The page is the caller's to choose, and one page is what was asked for;
+        // `perPage` on its own would have walked every page of the result set.
+        ...boundedPage(perPage),
       });
 
       const items = (results || []).map((r: any) => ({
@@ -104,7 +111,11 @@ export const gitlabSearchCodeTool: Tool = {
         search: searchTerm,
         ref: params.ref || "default",
         page,
+        perPage,
         totalFound: items.length,
+        // GitLab fills a page only when more matches exist, so a full page means this is
+        // not the end of them — raise `per_page` or ask for the next `page`.
+        truncated: pageIsFull(items.length, perPage),
         results: items,
       };
 

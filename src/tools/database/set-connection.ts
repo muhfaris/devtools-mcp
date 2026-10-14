@@ -20,6 +20,13 @@ export const databaseSetConnectionTool: Tool = {
       description:
         'Database engine: "postgresql", "mysql", "mariadb" (default: "postgresql")',
     },
+    readonly: {
+      type: "boolean",
+      optional: true,
+      description:
+        "Open this connection read-only: writes are refused here whatever security.allow_write says (default: false)",
+      default: false,
+    },
   },
   execute: async (params) => {
     const config = (global as any).__devtools_config || {};
@@ -37,7 +44,10 @@ export const databaseSetConnectionTool: Tool = {
     const dsn = params.dsn;
     const engine = params.engine || "postgresql";
 
-    config.providers.database.connections[name] = { dsn };
+    config.providers.database.connections[name] = {
+      dsn,
+      ...(params.readonly === true ? { readonly: true } : {}),
+    };
     if (!config.providers.database.default_engine) {
       config.providers.database.default_engine = engine;
     }
@@ -51,7 +61,12 @@ export const databaseSetConnectionTool: Tool = {
           type: "text",
           text: JSON.stringify({
             ok: true,
-            data: { updated: true, name, engine },
+            data: {
+              updated: true,
+              name,
+              engine,
+              readonly: params.readonly === true,
+            },
           }),
         },
       ],
