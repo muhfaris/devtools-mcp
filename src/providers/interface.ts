@@ -46,7 +46,17 @@ export interface DBProvider {
   disconnect(): Promise<void>;
   introspect(tableName?: string): Promise<SchemaInfo>;
   executeQuery(query: string, params?: any[]): Promise<any[]>;
-  explainQuery(query: string): Promise<any>;
+  /**
+   * The plan for `query`. `analyze` runs the statement for real timings, which is why
+   * `explain_query` sends a non-read statement through the write gate before calling
+   * this: the two are the same operation when the flag is on.
+   */
+  explainQuery(query: string, analyze?: boolean): Promise<any>;
   healthCheck(): Promise<boolean>;
+  /**
+   * The engine answering right now. MySQL and MariaDB are different servers with
+   * different plan output, so a provider that can reach either reports which one it
+   * actually got, not the name the config asked for.
+   */
   getEngine(): string;
 }

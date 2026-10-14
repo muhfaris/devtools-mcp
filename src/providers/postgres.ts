@@ -44,6 +44,32 @@ export class PostgresProvider implements DBProvider {
     this.config = config;
     this.pool = new Pool(buildPoolOptions(config));
     this.client = await this.pool.connect();
+
+    if (config.readonly === true) await this.enforceReadOnly();
+  }
+
+  /**
+   * Make the session refuse writes at the server.
+   *
+   * The tool gate is the first layer, and it reads the statement: anything it does not
+   * recognise as a read is refused. This is the second, and it does not read anything —
+   * PostgreSQL itself rejects the write, which covers what no amount of parsing can
+   * (a `CALL` into a function that writes, a statement the classifier guessed wrong).
+   *
+   * Fails closed: a connection that cannot be made readonly is closed rather than used,
+   * because the alternative is a guard that only appears to hold.
+   */
+  private async enforceReadOnly(): Promise<void> {
+    try {
+      await this.client!.query(
+        "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY",
+      );
+    } catch (error: any) {
+      await this.disconnect().catch(() => {});
+      throw new Error(
+        `Could not open this PostgreSQL connection as read-only, so it was closed: ${error?.message ?? error}`,
+      );
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -240,10 +266,14 @@ export class PostgresProvider implements DBProvider {
     return result.rows;
   }
 
-  async explainQuery(query: string): Promise<any> {
+  async explainQuery(query: string, analyze = true): Promise<any> {
     if (!this.client) throw new Error("Not connected to database");
+    // `ANALYZE` executes the statement, so it is a flag rather than a constant: the
+    // caller that only wants the estimated plan should not pay for a real run, nor
+    // cause one.
+    const options = analyze ? "ANALYZE, VERBOSE, BUFFERS" : "VERBOSE";
     const result = await this.client.query(
-      `EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON) ${query}`,
+      `EXPLAIN (${options}, FORMAT JSON) ${query}`,
     );
     return result.rows[0]?.["QUERY PLAN"] || result.rows;
   }

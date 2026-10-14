@@ -1,0 +1,49 @@
+{
+  "query_optimization": {
+    "r_total_time_ms": 0.105126071
+  },
+  "query_block": {
+    "select_id": 1,
+    "cost": 86.09608544,
+    "r_loops": 1,
+    "r_total_time_ms": 6952.111801,
+    "nested_loop": [
+      {
+        "table": {
+          "table_name": "ticket_assignee",
+          "access_type": "ref",
+          "possible_keys": [
+            "FK_TICKET_ASSIGNEE_ACCOUNT"
+          ],
+          "key": "FK_TICKET_ASSIGNEE_ACCOUNT",
+          "key_length": "106",
+          "used_key_parts": [
+            "account_id"
+          ],
+          "ref": [
+            "const"
+          ],
+          "loops": 1,
+          "r_loops": 1,
+          "rows": 63158,
+          "r_index_rows": 31812,
+          "r_rows": 31812,
+          "cost": 86.09608544,
+          "r_table_time_ms": 6943.120768,
+          "r_other_time_ms": 8.987534841,
+          "r_engine_stats": {
+            "pages_accessed": 95571,
+            "pages_read_count": 18972,
+            "pages_read_time_ms": 6707.561619
+          },
+          "filtered": 100,
+          "r_total_filtered": 100,
+          "index_condition": "ticket_assignee.account_id = '01ZZACUS000000000000000007'",
+          "r_icp_filtered": 100,
+          "attached_condition": "ticket_assignee.deleted_at = 0",
+          "r_filtered": 100
+        }
+      }
+    ]
+  }
+}

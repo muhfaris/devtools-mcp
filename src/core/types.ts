@@ -151,12 +151,23 @@ export interface ConnectionConfig {
    * reach a server; this says whether to trust it.
    */
   ssl?: ConnectionTlsConfig;
+  /**
+   * A hard, per-connection write deny that **outranks** `security.allow_write`.
+   *
+   * `blocked_env` matches a name, which cannot protect a connection called `dev` that
+   * happens to point at live data; this states the intent instead of inferring it. It is
+   * enforced twice: the tool refuses a write before it runs, and the session is opened
+   * read-only (`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`), so a statement
+   * that slips past the first gate still fails at the server.
+   */
+  readonly?: boolean;
 }
 
 export interface SecurityConfig {
   /**
    * Write grant for every provider. Denied by default, so a missing or misspelled
-   * block fails closed. A `providers.<provider>.security` block overrides this.
+   * block fails closed. A `providers.<provider>.security` block overrides this, and a
+   * `readonly: true` connection still refuses writes of its own.
    */
   allow_write?: boolean;
   /**
@@ -198,6 +209,12 @@ export interface RedisConnectionConfig {
   password?: string;
   db?: number;
   timeout?: number;
+  /**
+   * A hard, per-connection write deny that **outranks** `security.allow_write`, on the
+   * same terms as a database connection's. Redis has no session-level equivalent to
+   * enforce it a second time, so the write tools are the only gate.
+   */
+  readonly?: boolean;
 }
 
 export interface RedisConfig {

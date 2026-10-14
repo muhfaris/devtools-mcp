@@ -1,5 +1,6 @@
 import { ToolError } from "../../core/errors.js";
 import { getProviderConfig } from "../../core/provider-config.js";
+import type { ConnectionWritePolicy } from "../../core/security.js";
 
 export const requireDatabaseConnection = (
   config: any,
@@ -47,6 +48,61 @@ export const requireQuery = (query: unknown): string => {
     );
   }
   return value;
+};
+
+/**
+ * Turn a refused write into the error that names the rule which refused it.
+ *
+ * One error per reason, because "writes are disabled" and "this connection is readonly"
+ * send the reader to two different lines of the config, and a shared message would leave
+ * them editing the one that was never in the way.
+ */
+export const databaseWriteRefused = (
+  policy: ConnectionWritePolicy,
+  connectionName: string,
+): ToolError => {
+  const configKey = `providers.database.connections.${connectionName}`;
+  const reason = policy.denied_by[0];
+  const also = policy.denied_by.slice(1);
+  const alsoText = also.length ? ` Also refused by: ${also.join(", ")}.` : "";
+
+  switch (reason) {
+    case "connection_readonly":
+      return new ToolError(
+        "DATABASE_CONNECTION_READONLY",
+        `Database connection "${connectionName}" is readonly: true, so writes are refused here regardless of any allow_write grant.` +
+          alsoText,
+        "Run this statement on a writable connection, or ask the user to remove `readonly: true` from this connection if it was not meant to be a guard. Do not retry the same statement on this connection.",
+        false,
+        { parameter: "connection", configKey: `${configKey}.readonly` },
+      );
+    case "environment_blocked":
+      return new ToolError(
+        "DATABASE_ENVIRONMENT_BLOCKED",
+        `Database writes are blocked for connection "${connectionName}" — it matches the blocked_env entry "${policy.detail}".` +
+          alsoText,
+        "Choose an explicitly permitted configured connection; do not retry against this connection.",
+        false,
+        { parameter: "connection" },
+      );
+    case "provider_disabled":
+      return new ToolError(
+        "DATABASE_DISABLED",
+        "Database provider is disabled in configuration.",
+        "Enable providers.database.enabled in .devtools/config.yaml, then retry this tool.",
+        true,
+        { configKey: "providers.database.enabled" },
+      );
+    default:
+      return new ToolError(
+        "DATABASE_WRITE_DISABLED",
+        `Database write statements are disabled on "${connectionName}": no allow_write grant covers it.` +
+          alsoText,
+        "Ask the user to enable providers.database.security.allow_write if this write is intentional, then retry this tool.",
+        true,
+        { configKey: "providers.database.security.allow_write" },
+      );
+  }
 };
 
 export const databaseRequestError = (operation: string, cause: unknown) => {

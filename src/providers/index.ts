@@ -11,7 +11,10 @@ export const createProvider = (engine: DBEngine): DBProvider => {
       return new PostgresProvider();
     case "mysql":
     case "mariadb":
-      return new MySQLProvider();
+      // The name is a hint, not a fact: the server itself is asked at connect time.
+      // Passing it anyway keeps a plan labelled `mariadb` on a server where the probe
+      // is refused.
+      return new MySQLProvider(engine);
     default:
       throw new Error(`Unsupported database engine: ${engine}`);
   }

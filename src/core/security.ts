@@ -58,6 +58,59 @@ export const resolveSecurity = (
   blocked_env: resolveBlockedEnvs(config, provider),
 });
 
+/** One rule that can refuse a write on a single connection. */
+export type WriteDenyReason =
+  | "provider_disabled"
+  | "connection_readonly"
+  | "environment_blocked"
+  | "no_grant";
+
+/**
+ * The effective write capability of one connection, and every rule that denies it.
+ *
+ * One resolver, used by the write gates and by `show_config`, because two descriptions of
+ * the same policy drift apart: the gate would refuse a statement the config view called
+ * permitted (or worse, allow one it called refused), and the reader would have no way to
+ * tell which of the two was lying.
+ */
+export type ConnectionWritePolicy = {
+  can_write: boolean;
+  /** Every applicable deny, most specific first. Empty when `can_write`. */
+  denied_by: WriteDenyReason[];
+  /** What decided it: the connection name, or the `blocked_env` entry that matched. */
+  detail?: string;
+};
+
+export const resolveConnectionWrite = (
+  config: Config,
+  provider: ProviderName,
+  identifier: string,
+  readonlyConnection: boolean | undefined,
+): ConnectionWritePolicy => {
+  const denied_by: WriteDenyReason[] = [];
+  let detail: string | undefined;
+
+  // An explicit per-connection `readonly: true` is the stated intent, so it heads the
+  // list: it is the reason a reader is most likely to have forgotten about.
+  if (readonlyConnection === true) {
+    denied_by.push("connection_readonly");
+    detail = String(identifier);
+  }
+
+  const blocked = findBlockedEnvironment(config, provider, identifier);
+  if (blocked !== undefined) {
+    denied_by.push("environment_blocked");
+    detail = detail ?? blocked;
+  }
+
+  if (!resolveAllowWrite(config, provider)) denied_by.push("no_grant");
+  if (!isProviderEnabled(config, provider)) denied_by.push("provider_disabled");
+
+  return denied_by.length === 0
+    ? { can_write: true, denied_by }
+    : { can_write: false, denied_by, detail };
+};
+
 /**
  * Match an identifier against the provider's blocked list, case-insensitively on both
  * sides. Returns the offending entry as a string, or `undefined` when it is allowed.

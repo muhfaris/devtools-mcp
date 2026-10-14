@@ -1,0 +1,208 @@
+{
+  "query_optimization": {
+    "r_total_time_ms": 0.532136166
+  },
+  "query_block": {
+    "select_id": 1,
+    "cost": 264.3484207,
+    "r_loops": 1,
+    "r_total_time_ms": 28142.77451,
+    "filesort": {
+      "sort_key": "t.created_at desc, t.`id` desc",
+      "r_loops": 1,
+      "r_total_time_ms": 0.213654934,
+      "r_limit": 11,
+      "r_used_priority_queue": true,
+      "r_output_rows": 12,
+      "r_sort_mode": "sort_key,rowid",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "<derived2>",
+              "access_type": "ALL",
+              "possible_keys": [
+                "distinct_key"
+              ],
+              "loops": 1,
+              "r_loops": 1,
+              "rows": 108734,
+              "r_rows": 54084,
+              "cost": 4.868735296,
+              "r_table_time_ms": 34.34115657,
+              "r_other_time_ms": 71.0134667,
+              "filtered": 100,
+              "r_total_filtered": 100,
+              "r_filtered": 100,
+              "materialized": {
+                "query_block": {
+                  "union_result": {
+                    "table_name": "<union2,3>",
+                    "access_type": "ALL",
+                    "r_loops": 1,
+                    "r_rows": 54084,
+                    "query_specifications": [
+                      {
+                        "query_block": {
+                          "select_id": 2,
+                          "cost": 7.19727708,
+                          "r_loops": 1,
+                          "r_total_time_ms": 75.78300875,
+                          "nested_loop": [
+                            {
+                              "table": {
+                                "table_name": "t",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                  "ticket_ie_5",
+                                  "ticket_ie_7",
+                                  "ticket_ie_8",
+                                  "ticket_ie_9",
+                                  "ticket_ie_14",
+                                  "ticket_ie_17",
+                                  "ticket_ie_11",
+                                  "ticket_ie_19",
+                                  "ticket_ie_21",
+                                  "ticket_ie_22",
+                                  "ticket_ie_23",
+                                  "ticket_ie_24",
+                                  "ticket_ie_25",
+                                  "ticket_ie_4"
+                                ],
+                                "key": "ticket_ie_11",
+                                "key_length": "1026",
+                                "used_key_parts": [
+                                  "deleted_at",
+                                  "created_by"
+                                ],
+                                "ref": [
+                                  "const",
+                                  "const"
+                                ],
+                                "loops": 1,
+                                "r_loops": 1,
+                                "rows": 45576,
+                                "r_rows": 22428,
+                                "cost": 7.19727708,
+                                "r_table_time_ms": 64.76760901,
+                                "r_other_time_ms": 11.011257,
+                                "r_engine_stats": {
+                                  "pages_accessed": 529,
+                                  "pages_read_count": 202,
+                                  "pages_read_time_ms": 52.50132031
+                                },
+                                "filtered": 84.66736603,
+                                "r_total_filtered": 100,
+                                "attached_condition": "t.created_by = '01ZZACUS000000000000000007'",
+                                "r_filtered": 100,
+                                "using_index": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "query_block": {
+                          "select_id": 3,
+                          "operation": "UNION",
+                          "cost": 86.09608544,
+                          "r_loops": 1,
+                          "r_total_time_ms": 5234.988327,
+                          "nested_loop": [
+                            {
+                              "table": {
+                                "table_name": "ta",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                  "FK_TICKET_ASSIGNEE_ACCOUNT"
+                                ],
+                                "key": "FK_TICKET_ASSIGNEE_ACCOUNT",
+                                "key_length": "106",
+                                "used_key_parts": [
+                                  "account_id"
+                                ],
+                                "ref": [
+                                  "const"
+                                ],
+                                "loops": 1,
+                                "r_loops": 1,
+                                "rows": 63158,
+                                "r_index_rows": 31812,
+                                "r_rows": 31812,
+                                "cost": 86.09608544,
+                                "r_table_time_ms": 5193.567892,
+                                "r_other_time_ms": 41.41513642,
+                                "r_engine_stats": {
+                                  "pages_accessed": 95571,
+                                  "pages_read_count": 18960,
+                                  "pages_read_time_ms": 4996.842795
+                                },
+                                "filtered": 100,
+                                "r_total_filtered": 100,
+                                "index_condition": "ta.account_id = '01ZZACUS000000000000000007'",
+                                "r_icp_filtered": 100,
+                                "attached_condition": "ta.deleted_at = 0",
+                                "r_filtered": 100
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "table": {
+              "table_name": "t",
+              "access_type": "eq_ref",
+              "possible_keys": [
+                "PRIMARY",
+                "ticket_ie_3",
+                "ticket_ie_5",
+                "ticket_ie_7",
+                "ticket_ie_8",
+                "ticket_ie_9",
+                "ticket_ie_14",
+                "ticket_ie_11",
+                "ticket_ie_19",
+                "ticket_ie_21",
+                "ticket_ie_22",
+                "ticket_ie_23",
+                "ticket_ie_24",
+                "ticket_ie_25",
+                "ticket_ie_4"
+              ],
+              "key": "PRIMARY",
+              "key_length": "106",
+              "used_key_parts": [
+                "id"
+              ],
+              "ref": [
+                "o.id"
+              ],
+              "loops": 108734,
+              "r_loops": 54084,
+              "rows": 1,
+              "r_rows": 1,
+              "cost": 186.3309318,
+              "r_table_time_ms": 22652.96942,
+              "r_other_time_ms": 73.35177496,
+              "r_engine_stats": {
+                "pages_accessed": 222463,
+                "pages_read_count": 56405,
+                "pages_read_time_ms": 21976.18973
+              },
+              "filtered": 3.32178545,
+              "r_total_filtered": 1.708453517,
+              "attached_condition": "t.deleted_at = 0 and t.`stage` = 'In Progress'",
+              "r_filtered": 1.708453517
+            }
+          }
+        ]
+      }
+    }
+  }
+}
