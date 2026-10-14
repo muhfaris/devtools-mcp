@@ -8,8 +8,14 @@ afterEach(() => {
   (global as any).__devtools_config = originalConfig;
 });
 
+const databaseConfig = (connections: Record<string, { dsn: string }>) => ({
+  providers: {
+    database: { enabled: true, default_engine: "mariadb", connections },
+  },
+});
+
 describe("show_config", () => {
-  it("exposes development DSNs and sanitizes other connection credentials", async () => {
+  it("masks credentials on every connection by default", async () => {
     (global as any).__devtools_config = {
       providers: {
         database: {
@@ -17,7 +23,7 @@ describe("show_config", () => {
           default_engine: "mariadb",
           connections: {
             dev: {
-              dsn: "mariadb://dev:secret@localhost:3306/app?ssl=true",
+              dsn: "mariadb://mariadb:mariadb@localhost:3306/app?ssl=true",
             },
             staging: {
               dsn: "mariadb://stage:secret@db.example.com/app?password=hidden&access_token=also-hidden&ssl=true",
@@ -40,14 +46,16 @@ describe("show_config", () => {
     const result = await parseToolJson(showConfigTool, {});
 
     expect(result.database.connections.dev).toMatchObject({
-      dsn: "mariadb://dev:secret@localhost:3306/app?ssl=true",
-      credentials_exposed: true,
+      dsn: "mariadb://***:***@localhost:3306/app?ssl=true",
+      credentials_exposed: false,
     });
     expect(result.database.connections.staging).toMatchObject({
       dsn: "mariadb://***:***@db.example.com/app?password=***&access_token=***&ssl=true",
       credentials_exposed: false,
     });
-    expect(JSON.stringify(result)).not.toContain("glpat-secret");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("mariadb:mariadb");
+    expect(serialized).not.toContain("glpat-secret");
     expect(result.gitlab).toEqual({
       enabled: true,
       url: "https://gitlab.example.com",
@@ -59,6 +67,75 @@ describe("show_config", () => {
     expect(result.database.security).toEqual({
       allow_write: true,
       blocked_env: ["production"],
+    });
+  });
+
+  it("reports the TLS and timeout settings as paths, never as certificate contents", async () => {
+    (global as any).__devtools_config = {
+      providers: {
+        database: {
+          enabled: true,
+          default_engine: "postgresql",
+          connections: {
+            prod: {
+              dsn: "postgres://user:pass@db.example.com:12273/db?sslmode=require",
+              connect_timeout: 10000,
+              ssl: { ca: "/etc/ssl/aiven-ca.pem", rejectUnauthorized: true },
+            },
+            dev: { dsn: "postgresql://user:pass@127.0.0.1:5433/app" },
+          },
+        },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, {});
+
+    expect(result.database.connections.prod).toMatchObject({
+      connect_timeout: 10000,
+      ssl: {
+        ca: "/etc/ssl/aiven-ca.pem",
+        cert: null,
+        key: null,
+        rejectUnauthorized: true,
+      },
+    });
+    // A connection declaring no TLS block says so, rather than implying a default.
+    expect(result.database.connections.dev).toMatchObject({
+      connect_timeout: null,
+      ssl: null,
+    });
+    // The certificate is read at connect time; `show_config` never holds its contents.
+    expect(JSON.stringify(result)).not.toContain("BEGIN CERTIFICATE");
+  });
+
+  it("unmasks development connections only when show_credentials is set", async () => {
+    (global as any).__devtools_config = databaseConfig({
+      dev: { dsn: "mariadb://mariadb:mariadb@localhost:3306/app" },
+      staging: { dsn: "mariadb://stage:secret@db.example.com/app" },
+    });
+
+    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+
+    expect(result.database.connections.dev).toMatchObject({
+      dsn: "mariadb://mariadb:mariadb@localhost:3306/app",
+      credentials_exposed: true,
+    });
+    expect(result.database.connections.staging).toMatchObject({
+      dsn: "mariadb://***:***@db.example.com/app",
+      credentials_exposed: false,
+    });
+  });
+
+  it("stays masked when show_credentials is explicitly false", async () => {
+    (global as any).__devtools_config = databaseConfig({
+      dev: { dsn: "mariadb://mariadb:mariadb@localhost:3306/app" },
+    });
+
+    const result = await parseToolJson(showConfigTool, { show_credentials: false });
+
+    expect(result.database.connections.dev).toMatchObject({
+      dsn: "mariadb://***:***@localhost:3306/app",
+      credentials_exposed: false,
     });
   });
 
@@ -78,44 +155,33 @@ describe("show_config", () => {
   });
 
   it.each(["local", "LOCAL", "development"])(
-    "recognizes %s as a development connection",
+    "recognizes %s as opt-in-unmaskable",
     async (name) => {
-      (global as any).__devtools_config = {
-        providers: {
-          database: {
-            default_engine: "postgresql",
-            connections: {
-              [name]: {
-                dsn: "postgresql://user:pass@localhost/app",
-              },
-            },
-          },
-        },
-      };
+      (global as any).__devtools_config = databaseConfig({
+        [name]: { dsn: "postgresql://user:pass@localhost/app" },
+      });
 
-      const result = await parseToolJson(showConfigTool, {});
-      expect(result.database.connections[name].credentials_exposed).toBe(true);
+      const masked = await parseToolJson(showConfigTool, {});
+      expect(masked.database.connections[name].credentials_exposed).toBe(false);
+
+      const exposed = await parseToolJson(showConfigTool, {
+        show_credentials: true,
+      });
+      expect(exposed.database.connections[name].credentials_exposed).toBe(true);
     },
   );
 
-  it("does not treat prefixed names as development", async () => {
-    (global as any).__devtools_config = {
-      providers: {
-        database: {
-          default_engine: "postgresql",
-          connections: {
-            "dev-production": {
-              dsn: "postgresql://user:pass@host/app",
-            },
-          },
-        },
-      },
-    };
+  it("does not unmask a prefixed name even when opted in", async () => {
+    (global as any).__devtools_config = databaseConfig({
+      "dev-production": { dsn: "postgresql://user:pass@host/app" },
+    });
 
-    const result = await parseToolJson(showConfigTool, {});
-    expect(
-      result.database.connections["dev-production"].credentials_exposed,
-    ).toBe(false);
+    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+
+    expect(result.database.connections["dev-production"]).toMatchObject({
+      dsn: "postgresql://***:***@host/app",
+      credentials_exposed: false,
+    });
   });
 
   it("describes standalone and sentinel Redis connections without secrets", async () => {
@@ -152,7 +218,7 @@ describe("show_config", () => {
 
     expect(connections.dev).toMatchObject({
       mode: "standalone",
-      url: "redis://:dev-secret@localhost:6379/2",
+      url: "redis://:***@localhost:6379/2",
       sentinels: [],
       master_name: null,
       role: null,
@@ -176,7 +242,30 @@ describe("show_config", () => {
 
     const serialized = JSON.stringify(result);
     expect(serialized).not.toMatch(
-      /sentinel-pass|data-pass|sentinel-user|data-user/,
+      /dev-secret|sentinel-pass|data-pass|sentinel-user|data-user/,
+    );
+  });
+
+  it("unmasks the development Redis URL only when show_credentials is set", async () => {
+    (global as any).__devtools_config = {
+      providers: {
+        redis: {
+          enabled: true,
+          connections: {
+            dev: { url: "redis://:dev-secret@localhost:6379/2" },
+            cache: { url: "redis://:cache-secret@localhost:6379/1" },
+          },
+        },
+      },
+    };
+
+    const result = await parseToolJson(showConfigTool, { show_credentials: true });
+
+    expect(result.redis.connections.dev.url).toBe(
+      "redis://:dev-secret@localhost:6379/2",
+    );
+    expect(result.redis.connections.cache.url).toBe(
+      "redis://:***@localhost:6379/1",
     );
   });
 });

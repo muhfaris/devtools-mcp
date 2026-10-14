@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -172,5 +172,222 @@ describe("reloadConfig", () => {
 
     expect(await mod.reloadConfig()).toEqual({});
     expect(mod.getConfigPath()).toBeNull();
+  });
+});
+
+
+describe("command values (cmd:)", () => {
+  it("resolves a cmd: value from the command's stdout", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "token: cmd:printf 'glpat-from-pass\\n'\n");
+
+    const { loadConfig } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).token).toBe("glpat-from-pass");
+  });
+
+  it("strips one trailing newline and nothing else", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "token: cmd:printf 'abc\\n\\n'\n");
+
+    const { loadConfig } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).token).toBe("abc\n");
+  });
+
+  it("only treats a whole-value cmd: prefix as a command", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "dsn: prefix-cmd:printf 'pwned'\n");
+
+    const { loadConfig } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).dsn).toBe("prefix-cmd:printf 'pwned'");
+  });
+
+  it("does not execute a value that only expands into cmd:", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    vi.stubEnv("INJECTED", "cmd:printf 'pwned'");
+    writeConfig(".", "token: ${INJECTED}\n");
+
+    const { loadConfig } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).token).toBe("cmd:printf 'pwned'");
+  });
+
+  it("expands environment variables inside the command body", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    vi.stubEnv("ACCOUNT", "accountb");
+    writeConfig(".", "token: cmd:echo ${ACCOUNT}\n");
+
+    const { loadConfig } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).token).toBe("accountb");
+  });
+
+  it("refuses to run when the gate is closed, without failing the load", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    writeConfig(".", "providers:\n  gitlab:\n    token: cmd:printf 'pwned'\n");
+
+    const { loadConfig, getCmdKeys, isCmdAllowed } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    expect(isCmdAllowed()).toBe(false);
+    expect(config.providers.gitlab.token).toBe("");
+    expect(getCmdKeys()).toEqual([
+      { key: "providers.gitlab.token", resolved: false },
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("providers.gitlab.token"),
+    );
+
+    warn.mockRestore();
+  });
+
+  it("runs, and records the key, when the gate is open", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "true");
+    writeConfig(".", "providers:\n  gitlab:\n    token: cmd:printf 'ok'\n");
+
+    const { loadConfig, getCmdKeys } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).providers.gitlab.token).toBe("ok");
+    expect(getCmdKeys()).toEqual([
+      { key: "providers.gitlab.token", resolved: true },
+    ]);
+  });
+
+  it("names the key path for values nested in maps and arrays", async () => {
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "blocked:\n  - cmd:printf 'a'\n");
+
+    const { loadConfig, getCmdKeys } = await loadFreshModule();
+
+    expect(((await loadConfig()) as any).blocked).toEqual(["a"]);
+    expect(getCmdKeys()).toEqual([{ key: "blocked[0]", resolved: true }]);
+  });
+
+  it("survives a command that exits non-zero, naming the key", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "token: cmd:sh -c 'echo SECRET; exit 3'\n");
+
+    const { loadConfig, getCmdKeys } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    expect(config.token).toBe("");
+    expect(getCmdKeys()).toEqual([{ key: "token", resolved: false }]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("token"));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("exited with status 3"),
+    );
+
+    warn.mockRestore();
+  });
+
+  it("never echoes the command's own output when it fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "token: cmd:sh -c 'echo SECRET; exit 1'\n");
+
+    const { loadConfig } = await loadFreshModule();
+    await loadConfig();
+
+    // The warning names the key, never the output: stdout holds the secret being fetched.
+    expect(warn.mock.calls.flat().join(" ")).not.toContain("SECRET");
+
+    warn.mockRestore();
+  });
+
+  it("gives up on a command that hangs without failing the load", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(".", "token: cmd:sleep 6\n");
+
+    const { loadConfig, getCmdKeys } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    expect(config.token).toBe("");
+    expect(getCmdKeys()).toEqual([{ key: "token", resolved: false }]);
+    expect(warn.mock.calls.flat().join(" ")).toContain("timed out");
+
+    warn.mockRestore();
+  }, 15000);
+
+  it("keeps the load alive when one provider's command fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(
+      ".",
+      "providers:\n  gitlab:\n    token: cmd:sh -c 'exit 1'\n  database:\n    default_engine: postgresql\n    connections:\n      dev:\n        dsn: postgresql://localhost/app\n",
+    );
+
+    const { loadConfig } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    // The failure has no way to know which provider the caller wanted, so it must not
+    // decide for them: GitLab degrades, the database is untouched.
+    expect(config.providers.gitlab.token).toBe("");
+    expect(config.providers.database.connections.dev.dsn).toBe(
+      "postgresql://localhost/app",
+    );
+
+    warn.mockRestore();
+  });
+
+  it("does not run a command under a provider that is disabled", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    const marker = join(tmpDir, "ran");
+    writeConfig(
+      ".",
+      `providers:\n  gitlab:\n    enabled: false\n    token: cmd:touch ${marker}\n`,
+    );
+
+    const { loadConfig, getCmdKeys } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    expect(existsSync(marker)).toBe(false);
+    expect(config.providers.gitlab.token).toBe("");
+    expect(config.providers.gitlab.enabled).toBe(false);
+    expect(getCmdKeys()).toEqual([
+      { key: "providers.gitlab.token", resolved: false },
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("enabled: false"),
+    );
+
+    warn.mockRestore();
+  });
+
+  it("still runs the commands of an enabled provider beside a disabled one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("DEVTOOLS_ALLOW_CMD", "1");
+    writeConfig(
+      ".",
+      "providers:\n  gitlab:\n    enabled: false\n    token: cmd:printf 'never'\n  redis:\n    url: cmd:printf 'redis://localhost:6379'\n",
+    );
+
+    const { loadConfig } = await loadFreshModule();
+    const config = (await loadConfig()) as any;
+
+    expect(config.providers.redis.url).toBe("redis://localhost:6379");
+
+    warn.mockRestore();
+  });
+
+  it("only accepts 1/true as the gate", async () => {
+    const cases: Array<[string | undefined, boolean]> = [
+      [undefined, false],
+      ["", false],
+      ["1", true],
+      ["true", true],
+      ["TRUE", true],
+      ["yes", false],
+    ];
+
+    for (const [value, expected] of cases) {
+      vi.stubEnv("DEVTOOLS_ALLOW_CMD", value);
+      const { isCmdAllowed } = await loadFreshModule();
+      expect(isCmdAllowed()).toBe(expected);
+    }
   });
 });

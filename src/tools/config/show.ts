@@ -1,4 +1,4 @@
-import { getConfigPath } from "../../core/config.js";
+import { getCmdKeys, getConfigPath, isCmdAllowed } from "../../core/config.js";
 import { getConfigRuntimeState } from "../../core/runtime-config.js";
 import type {
   Config,
@@ -9,7 +9,12 @@ import type {
 import { isProviderEnabled, resolveSecurity } from "../../core/security.js";
 import { getProviderConfig } from "../../core/provider-config.js";
 
-const developmentConnectionNames = new Set(["local", "dev", "development"]);
+/**
+ * The only connections an explicit `show_credentials` may unmask. Kept narrow on
+ * purpose: a DSN in a tool response reaches the model's context and the transcript, and
+ * `docs/Configuration.md` promises credentials are never returned.
+ */
+const unmaskableConnectionNames = new Set(["local", "dev", "development"]);
 const sensitiveQueryKeys =
   /^(password|pass|pwd|token|access[_-]?token|secret|api[_-]?key|private[_-]?key|sslkey)$/i;
 
@@ -27,12 +32,28 @@ const sanitizeDsn = (dsn: string): string => {
   }
 };
 
-const showConnection = (name: string, connection: ConnectionConfig) => {
-  const credentialsExposed = developmentConnectionNames.has(name.toLowerCase());
+const showConnection = (
+  name: string,
+  connection: ConnectionConfig,
+  showCredentials: boolean,
+) => {
+  const credentialsExposed =
+    showCredentials && unmaskableConnectionNames.has(name.toLowerCase());
   return {
     dsn: credentialsExposed ? connection.dsn : sanitizeDsn(connection.dsn),
     pool_size: connection.pool_size ?? null,
     timeout: connection.timeout ?? null,
+    connect_timeout: connection.connect_timeout ?? null,
+    // Paths only: the certificate itself is read at connect time and never held here, so
+    // reporting where it lives cannot disclose it.
+    ssl: connection.ssl
+      ? {
+          ca: connection.ssl.ca ?? null,
+          cert: connection.ssl.cert ?? null,
+          key: connection.ssl.key ?? null,
+          rejectUnauthorized: connection.ssl.rejectUnauthorized ?? null,
+        }
+      : null,
     credentials_exposed: credentialsExposed,
   };
 };
@@ -52,8 +73,13 @@ const urlHasCredentials = (url: string | undefined): boolean => {
  * Describe a Redis connection without leaking any credential.
  * Sentinel host:port pairs are safe to show; passwords and usernames never are.
  */
-const showRedisConnection = (name: string, connection: RedisConnectionConfig) => {
-  const credentialsExposed = developmentConnectionNames.has(name.toLowerCase());
+const showRedisConnection = (
+  name: string,
+  connection: RedisConnectionConfig,
+  showCredentials: boolean,
+) => {
+  const credentialsExposed =
+    showCredentials && unmaskableConnectionNames.has(name.toLowerCase());
   const sentinels = connection.sentinels ?? [];
   const isSentinel = sentinels.length > 0;
 
@@ -82,13 +108,20 @@ const showRedisConnection = (name: string, connection: RedisConnectionConfig) =>
   };
 };
 
-export const getSafeConfigView = (config: Config = {}) => {
+export const getSafeConfigView = (
+  config: Config = {},
+  showCredentials = false,
+) => {
   const db = getProviderConfig(config, "database");
   const gitlab = getProviderConfig(config, "gitlab");
   const redis = getProviderConfig(config, "redis");
   return {
     config_path: getConfigPath(),
     runtime: getConfigRuntimeState(),
+    command_values: {
+      enabled: isCmdAllowed(),
+      values: getCmdKeys(),
+    },
     id_generator: {
       default: config.id_generator?.default ?? null,
     },
@@ -100,7 +133,7 @@ export const getSafeConfigView = (config: Config = {}) => {
           connections: Object.fromEntries(
             Object.entries(db.connections || {}).map(([name, connection]) => [
               name,
-              showConnection(name, connection),
+              showConnection(name, connection, showCredentials),
             ]),
           ),
         }
@@ -122,7 +155,7 @@ export const getSafeConfigView = (config: Config = {}) => {
           connections: Object.fromEntries(
             Object.entries(redis.connections || {}).map(([name, connection]) => [
               name,
-              showRedisConnection(name, connection),
+              showRedisConnection(name, connection, showCredentials),
             ]),
           ),
         }
@@ -133,13 +166,25 @@ export const getSafeConfigView = (config: Config = {}) => {
 export const showConfigTool: Tool = {
   name: "show_config",
   description:
-    "Show the effective runtime configuration and reload status without exposing non-development credentials",
-  execute: async () => ({
+    "Show the effective runtime configuration and reload status with credentials masked",
+  params: {
+    show_credentials: {
+      type: "boolean",
+      optional: true,
+      default: false,
+      description:
+        "Return database DSNs and Redis URLs unmasked for connections named local, dev, or development. Off by default: those values enter the model's context and the transcript. Every other connection stays sanitized either way.",
+    },
+  },
+  execute: async (params) => ({
     content: [
       {
         type: "text",
         text: JSON.stringify(
-          getSafeConfigView((global as any).__devtools_config || {}),
+          getSafeConfigView(
+            (global as any).__devtools_config || {},
+            params?.show_credentials === true,
+          ),
           null,
           2,
         ),
