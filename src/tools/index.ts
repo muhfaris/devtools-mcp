@@ -21,6 +21,8 @@ import { explainQueryTool } from "./database/explain.js";
 import { gitlabListMrsTool } from "./gitlab/list-mrs.js";
 import { gitlabGetMrTool } from "./gitlab/get-mr.js";
 import { gitlabCreateNoteTool } from "./gitlab/create-note.js";
+import { gitlabUpdateNoteTool } from "./gitlab/update-note.js";
+import { gitlabDeleteNoteTool } from "./gitlab/delete-note.js";
 import { gitlabReviewMrTool } from "./gitlab/review-mr.js";
 import { gitlabGetDiscussionsTool } from "./gitlab/discussions.js";
 import { gitlabGetFileTool } from "./gitlab/get-file.js";
@@ -79,6 +81,8 @@ export const registerAllTools = async (
   registry.register(gitlabListMrsTool);
   registry.register(gitlabGetMrTool);
   registry.register(gitlabCreateNoteTool);
+  registry.register(gitlabUpdateNoteTool);
+  registry.register(gitlabDeleteNoteTool);
   registry.register(gitlabReviewMrTool);
   registry.register(gitlabGetDiscussionsTool);
   registry.register(gitlabGetFileTool);

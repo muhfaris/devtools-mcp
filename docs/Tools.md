@@ -63,14 +63,20 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 
 | Tool | Description |
 | :--- | :--- |
-| `gitlab_list_mrs` | List merge requests |
-| `gitlab_get_mr` | Get MR details + diff |
-| `gitlab_create_note` | Add a comment to an MR |
-| `gitlab_review_mr` | Review an MR with suggestions |
-| `gitlab_get_discussions` | Get MR discussions |
+| `gitlab_list_mrs` | List merge requests, with filters |
+| `gitlab_get_mr` | Get MR details, commits, and file diffs, with every line numbered for the old and new side |
+| `gitlab_review_mr` | Review an MR with file-by-file suggestions |
+| `gitlab_get_mr_discussions` | Get all discussion threads and comments on an MR |
+| `gitlab_get_file` | Read lines, ranges, or grep a repo file — no clone |
+| `gitlab_get_commits` | Commit history for a branch, tag, or path (remote `git log`) |
+| `gitlab_compare_branches` | Compare refs: commits, full diffs, conflict status |
+| `gitlab_search_code` | Search code, symbols, or text across a repo (remote `git grep`) |
+| `gitlab_create_note` | Add a comment to an MR (inline diff comments supported) |
+| `gitlab_update_note` | Edit an existing MR comment — for when a review comment was wrong |
+| `gitlab_delete_note` | Delete an MR comment (needs `confirm: true`) |
 | `gitlab_set_config` | Set GitLab token/URL/projectId for the session |
 
-> `gitlab_create_note` is the only GitLab write tool. Writes are **denied by default**: enable them with `security.allow_write: true` (or `providers.gitlab.security.allow_write: true`), and keep the resolved project path/ID out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
+> The GitLab write tools are `gitlab_create_note`, `gitlab_update_note`, and `gitlab_delete_note`. Writes are **denied by default**: enable them with `security.allow_write: true` (or `providers.gitlab.security.allow_write: true`), and keep the resolved project path/ID out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
 
 ## Database
 
@@ -84,18 +90,20 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 
 ## Redis Tools
 
-| Tool | Description | Read-only | CLI Example |
+| Tool | Description | Access | CLI Example |
 | :--- | :--- | :---: | :--- |
-| `redis_info` | Server stats | ✅ | `devtools redis_info --section memory` |
-| `redis_list_keys` | Scan keys with pattern | ✅ | `devtools redis_list_keys --pattern "user:*"` |
-| `redis_get_key` | Get value by key | ✅ | `devtools redis_get_key --key "user:1"` |
-| `redis_key_info` | TTL, type, memory of keys | ✅ | `devtools redis_key_info --keys "user:1,user:2"` |
-| `redis_slowlog` | Slow query log | ✅ | `devtools redis_slowlog --count 10` |
-| `redis_set_key` | Set a string value | ✏️ | `devtools redis_set_key --key user:1 --value Alice` |
-| `redis_delete_key` | Delete keys (needs confirm) | ✏️ | `devtools redis_delete_key --keys "user:1" --confirm true` |
-| `redis_expire_key` | Set/remove TTL on a key | ✏️ | `devtools redis_expire_key --key session:abc --ttl 3600` |
+| `redis_info` | Server stats | read | `devtools redis_info --section memory` |
+| `redis_list_keys` | Scan keys with pattern | read | `devtools redis_list_keys --pattern "user:*"` |
+| `redis_get_key` | Get value by key | read | `devtools redis_get_key --key "user:1"` |
+| `redis_key_info` | TTL, type, memory of keys | read | `devtools redis_key_info --keys "user:1,user:2"` |
+| `redis_slowlog` | Slow query log | read | `devtools redis_slowlog --count 10` |
+| `redis_set_key` | Set a string value | write | `devtools redis_set_key --key user:1 --value Alice` |
+| `redis_delete_key` | Delete keys (needs confirm) | write | `devtools redis_delete_key --keys "user:1" --confirm true` |
+| `redis_expire_key` | Set/remove TTL on a key | write | `devtools redis_expire_key --key session:abc --ttl 3600` |
 
-> Write tools are **denied by default**: enable them with `security.allow_write: true` (or `providers.redis.security.allow_write: true`), and keep the connection name out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
+> `redis_set_key`, `redis_delete_key`, and `redis_expire_key` write, so they are **denied by default**: enable them with `security.allow_write: true` (or `providers.redis.security.allow_write: true`), and keep the connection name out of `blocked_env`, which defaults to `[production, prod]`.
+>
+> There is no per-connection `readonly` flag — `blocked_env` is the only per-connection control. See [Configuration](./Configuration.md#what-is-actually-enforced).
 
 Redis connections may be **standalone** (`url`) or **sentinel-backed**
 (`sentinels` + `master_name`). With Sentinel, the master is re-resolved on every
@@ -109,12 +117,12 @@ connect, so failovers are transparent to all of the tools above. See
 | :--- | :--- |
 | `gitlab_set_config` | Set GitLab config for the session |
 | `database_set_connection` | Set a DB connection for the session |
-| `providers_info` | Show safe database, GitLab, and Redis configuration; use `live: true` to check database health |
-| `show_config` | Show the effective, credential-redacted runtime configuration and reload status |
+| `providers_info` | Show safe database, GitLab, and Redis configuration; use `live: true` to check database and Redis health |
+| `show_config` | Show the effective, credential-redacted runtime configuration and reload status. `show_credentials: true` unmasks `local`/`dev`/`development` connections only |
 | `reload_config` | Re-read `.devtools/config.yaml`, replace the runtime config, and return the redacted view |
 | `config_init` | Create a starter `.devtools/config.yaml` with database/GitLab/Redis connections; refuses to overwrite an existing config. Redis connections are always written standalone — see [limits](./Configuration.md#config_init-output) |
 
-`providers_info` is config-only by default. With `live: true`, it connects only to configured database connections and reports their health. GitLab is never contacted and reports only `enabled` and `token_configured`; Redis reports safe connection metadata. Credentials and raw DSNs are never returned.
+`providers_info` is config-only by default. With `live: true`, it connects to every configured database and Redis connection and reports each one's health; a connection that cannot be reached reports `healthy: false` without failing the response, and carries a `failure` naming the cause: a stable `reason` (`tls_certificate_untrusted`, `authentication_failed`, `connection_refused`, `connection_timeout`, `host_not_found`, `database_not_found`, or `connection_failed`), the driver `code` when it is shaped like a code, and a `hint` with what to change. The driver's own message is never included — it can quote the DSN back — so the reason is classified rather than echoed; see [TLS and the DSN](./Configuration.md#tls-and-the-dsn). GitLab is never contacted. Every connection also carries `checked`, so an absent `healthy` cannot be mistaken for a passing check. Credentials and raw DSNs are masked in every view; the only way to see one is `show_config` with `show_credentials: true` — see [Configuration](./Configuration.md).
 
 ## Adding a new tool
 
