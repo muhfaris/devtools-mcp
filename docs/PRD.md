@@ -216,7 +216,7 @@ Tiap fase tetap shippable & usable secara independen — bukan blocked total sam
 
 ## 9. Security & Safety
 
-- `allow_write` punya **satu arti di semua provider**: grant, **deny by default**. Write `execute_query`, `gitlab_create_note`, dan Redis write butuh `security.allow_write: true` (default bersama) atau `providers.<provider>.security.allow_write: true` (override per provider); direkomendasikan hanya untuk dev/staging.
+- `allow_write` punya **satu arti di semua provider**: grant, **deny by default**. Write `execute_query`, `gitlab_create_note`/`gitlab_update_note`/`gitlab_delete_note`, dan Redis write butuh `security.allow_write: true` (default bersama) atau `providers.<provider>.security.allow_write: true` (override per provider); direkomendasikan hanya untuk dev/staging.
 - Environment yang ditandai `production`/`prod` dicocokkan lewat `blocked_env` (default `[production, prod]`) ke **nama koneksi** (bukan DSN/host); untuk GitLab dicocokkan ke **project path/ID**. Write tetap **diblokir default** dan butuh override eksplisit + konfirmasi.
 - Tidak ada flag `readonly` per koneksi: kontrol per koneksi diungkapkan dengan mendaftarkan nama koneksi di `blocked_env` provider tersebut.
 - Kredensial DB tidak pernah di-log atau dikembalikan dalam response tool (masking otomatis).

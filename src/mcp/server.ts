@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ToolRegistry } from "../core/registry.js";
 import type { ToolParamSchema } from "../core/types.js";
 import { stringifyToolError } from "../core/errors.js";
+import { VERSION } from "../core/version.js";
 import { z } from "zod";
 
 // Arbitrary JSON value for array/object items. Avoid a recursive union
@@ -66,7 +67,7 @@ export const createToolInputSchema = (
   );
 
 export const startMcpServer = async (registry: ToolRegistry) => {
-  const server = new McpServer({ name: "devtools-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "devtools-mcp", version: VERSION });
 
   for (const tool of registry.list()) {
     const schema = createToolInputSchema(tool.params);

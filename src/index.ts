@@ -5,6 +5,7 @@ import { createRegistry, registerAllTools } from "./tools/index.js";
 import { startMcpServer } from "./mcp/server.js";
 import { applyRuntimeConfig } from "./core/runtime-config.js";
 import { startConfigWatcher } from "./core/config-watch.js";
+import { VERSION } from "./core/version.js";
 
 const applyConfig = (config: any) => applyRuntimeConfig(config);
 
@@ -16,7 +17,7 @@ const main = async () => {
   await registerAllTools(registry, config);
 
   if (process.argv.length > 2) {
-    program.name("devtools").description("DevTools CLI").version("0.1.0");
+    program.name("devtools").description("DevTools CLI").version(VERSION);
 
     for (const tool of registry.list()) {
       const cmd = program

@@ -1,7 +1,39 @@
 {
   "name": "@muhfaris/devtools",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "DevTools MCP - Developer companion for AI assistants",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muhfaris/devtools-mcp.git"
+  },
+  "homepage": "https://github.com/muhfaris/devtools-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/muhfaris/devtools-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "devtools",
+    "developer-tools",
+    "ai",
+    "ai-tools",
+    "llm",
+    "claude",
+    "cursor"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -12,7 +44,7 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest",
-    "prepublishOnly": "bun run build",
+    "prepublishOnly": "npm run build",
     "inspect": "bunx @modelcontextprotocol/inspector bun src/index.ts"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ bun install
 
 ```bash
 # CLI mode
-bun dev generate-ulid
+bun dev generate_ulid
 
 # MCP mode (stdio server)
 bun dev
@@ -24,7 +24,7 @@ bun dev
 
 ```bash
 bun run build
-bun dist/index.js generate-ulid
+bun dist/index.js generate_ulid
 ```
 
 ## Run tests
@@ -80,13 +80,33 @@ export const exampleTool: Tool = {
 
 ## Publishing to npm
 
+Publishing requires Node **20.19+** (see `engines`). `prepublishOnly` runs
+`bun run build`, so a publish always ships a fresh `dist/`.
+
 ```bash
+# 1. Build. `npm pack --dry-run` does NOT trigger prepublishOnly, so build first
+#    or you will be inspecting a stale dist/.
+bun run build
+
+# 2. Inspect the tarball - the authoritative list of what ships.
+#    Expected: dist/, .devtools/, README.md, LICENSE
+#    Excluded: src/, tests/, docs/, .codecompanion/, tsconfig.json, vitest.config.ts
+npm pack --dry-run
+
+# 3. Publish. `publishConfig.access` is already public, so no --access flag.
 npm login
-npm publish --access public
+npm publish
+
+# 4. Tag the released commit.
+git tag v0.1.0
+git push --tags
 ```
 
 After publishing, users can run:
 
 ```bash
-npx @muhfaris/devtools generate-ulid
+npx @muhfaris/devtools generate_ulid
 ```
+
+CLI command names are the tool names verbatim, so they are underscored
+(`generate_ulid`) and never kebab-cased.
