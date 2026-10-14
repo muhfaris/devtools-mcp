@@ -7,11 +7,12 @@ import {
   resolveProjectId,
 } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
+import { parseDiffLines } from "../../providers/gitlab-diff.js";
 
 export const gitlabGetMrTool: Tool = {
   name: "gitlab_get_mr",
   description:
-    "Get detailed merge request metadata, commits, discussions, and file changes/diffs from GitLab. For deep code reviews with file-by-file suggestions, use gitlab_review_mr.",
+    "Get detailed merge request metadata, commits, discussions, and file changes/diffs from GitLab. Each changed file is numbered line by line for the old and new side, so an inline comment can be anchored without counting hunk headers. For deep code reviews with file-by-file suggestions, use gitlab_review_mr.",
   params: {
     mr_url: {
       type: "string",
@@ -48,6 +49,13 @@ export const gitlabGetMrTool: Tool = {
       description:
         "Include full un-truncated diffs for code reviews (default: false)",
       default: false,
+    },
+    diff_lines: {
+      type: "boolean",
+      optional: true,
+      description:
+        "Number every line of each changed file with its old_line, new_line, and type (added, removed, or unchanged), so a comment can be anchored without counting hunk headers (default: true). Pass false to trim the response.",
+      default: true,
     },
     include_discussions: {
       type: "boolean",
@@ -111,6 +119,7 @@ export const gitlabGetMrTool: Tool = {
       if (params.include_diff !== false) {
         const changes = await client.MergeRequests.showChanges(projectId, mrId);
         const full = params.full_diff === true;
+        const withLines = params.diff_lines !== false;
         diff = changes.changes.map((c: any) => ({
           file: c.new_path || c.old_path,
           added: c.new_file || false,
@@ -124,6 +133,10 @@ export const gitlabGetMrTool: Tool = {
               (c.diff && c.diff.length > 800
                 ? "\n... (truncated, pass full_diff: true for complete diff)"
                 : ""),
+          // Numbered from the complete patch, so the numbers stay right even when the text
+          // above is truncated. A null line number is a side the line does not exist on,
+          // and therefore a side a comment cannot be anchored to.
+          ...(withLines ? { lines: parseDiffLines(c.diff || "") } : {}),
         }));
       }
 

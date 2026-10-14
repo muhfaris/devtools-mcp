@@ -151,6 +151,48 @@ const createLineCode = (
   return `${pathHash}_${oldLine ?? ""}_${newLine ?? ""}`;
 };
 
+type DiffSide = "left" | "right";
+
+/**
+ * The number this line carries on the other side of the diff, or `undefined` when the
+ * line exists on `side` alone — an added line on the right, a removed line on the left.
+ */
+const counterpartLine = (
+  side: DiffSide,
+  line: number,
+  lines: ReturnType<typeof collectCommentableLines>,
+): number | undefined =>
+  side === "right" ? lines.newLines.get(line) : lines.oldLines.get(line);
+
+/**
+ * One end of a `line_range`.
+ *
+ * GitLab resolves an entry from the line numbers it is handed. A changed line exists on
+ * one side only, so it is addressed by that single number plus `type` — unchanged. But a
+ * line the diff shows as context exists on both sides, and addressed by one number alone
+ * GitLab resolves it to nothing and answers `line_code can't be blank`. Such a line has
+ * to carry both numbers, and then needs no `type` to disambiguate them.
+ */
+const buildRangeLine = (
+  path: string,
+  side: DiffSide,
+  line: number,
+  lines: ReturnType<typeof collectCommentableLines>,
+) => {
+  const counterpart = counterpartLine(side, line, lines);
+  const lineCode = createLineCode(path, side, line, lines);
+
+  if (counterpart === undefined) {
+    return side === "right"
+      ? { line_code: lineCode, new_line: line, old_line: undefined, type: "new" }
+      : { line_code: lineCode, new_line: undefined, old_line: line, type: "old" };
+  }
+
+  return side === "right"
+    ? { line_code: lineCode, new_line: line, old_line: counterpart }
+    : { line_code: lineCode, new_line: counterpart, old_line: line };
+};
+
 const validateInlinePosition = (
   params: Record<string, any>,
 ): InlinePosition => {
@@ -428,10 +470,17 @@ export const gitlabCreateNoteTool: Tool = {
         const baseSha = mr.diff_refs?.base_sha || sha;
         const headSha = mr.diff_refs?.head_sha || sha;
         const startSha = mr.diff_refs?.start_sha || sha;
-        const isRight = params.side !== "left";
+        const side: DiffSide = params.side === "left" ? "left" : "right";
+        const isRight = side === "right";
         const targetLine = isSingleLine ? Number(params.line) : Number(params.end_line);
-        const newLine = isRight ? targetLine : undefined;
-        const oldLine = !isRight ? targetLine : undefined;
+        const diffLines = getDiffLines(changedFile);
+        // A range's root line is its end. When that line is unchanged it exists on both
+        // sides, so its counterpart number has to travel with it for GitLab to resolve it.
+        const counterpart = isMultiLine
+          ? counterpartLine(side, targetLine, diffLines)
+          : undefined;
+        const newLine = isRight ? targetLine : counterpart;
+        const oldLine = isRight ? counterpart : targetLine;
 
         const position: any = {
           base_sha: baseSha,
@@ -447,24 +496,11 @@ export const gitlabCreateNoteTool: Tool = {
         if (isMultiLine) {
           const start = Number(params.start_line);
           const end = Number(params.end_line);
-          const diffLines = getDiffLines(changedFile);
-          const side = params.side === "left" ? "left" : "right";
           const filePath = side === "left" ? changedFile.old_path : changedFile.new_path;
-          const lineCode = (n: number) =>
-            createLineCode(filePath, side, n, diffLines);
+
           position.line_range = {
-            start: {
-              line_code: lineCode(start),
-              new_line: side === "right" ? start : undefined,
-              old_line: side === "left" ? start : undefined,
-              type: side === "left" ? "old" : "new",
-            },
-            end: {
-              line_code: lineCode(end),
-              new_line: side === "right" ? end : undefined,
-              old_line: side === "left" ? end : undefined,
-              type: side === "left" ? "old" : "new",
-            },
+            start: buildRangeLine(filePath, side, start, diffLines),
+            end: buildRangeLine(filePath, side, end, diffLines),
           };
         }
 

@@ -59,3 +59,28 @@ For a range, send `path`, `start_line`, and `end_line`; omit `line` entirely:
 - Build GitBeaker position options in camelCase, including nested range keys.
 - Add an integration-style serialization test that captures the multipart keys produced by GitBeaker and verifies GitLab-compatible names such as `position[base_sha]`, `position[new_line]`, and `position[line_range][start][line_code]`.
 - Retain diff validation: GitLab only accepts positions belonging to the selected MR diff/version.
+
+
+
+## Update 2026-09-25 — ranges that end on an unchanged line
+
+A range whose end is a context line was rejected by GitLab with `line_code can't be
+blank`, while an all-added range posted. The defect is the position entry, not
+`createLineCode`: a context line exists on **both** sides of the diff, and an entry
+addressed by one number alone does not resolve, so GitLab derives no `line_code`. A
+changed line resolves from its single number plus `type`.
+
+`buildRangeLine` in `src/tools/gitlab/create-note.ts` now emits, per range end:
+
+| Line | Entry |
+| :--- | :--- |
+| Added (right) | `{ line_code, new_line, old_line: undefined, type: "new" }` |
+| Removed (left) | `{ line_code, new_line: undefined, old_line, type: "old" }` |
+| Unchanged | `{ line_code, old_line, new_line }` — both numbers, no `type` |
+
+The changed-line shapes are unchanged, so only the previously failing case moves. The
+range root line carries its counterpart the same way. Confirmation against a live MR is
+still outstanding.
+
+`line_code` stays `sha1(path)_old_new`, with an empty component for a side the line does
+not exist on — that part was already correct.
