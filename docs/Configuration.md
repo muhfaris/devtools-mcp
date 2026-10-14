@@ -43,7 +43,12 @@ providers:
       dev:
         dsn: ${DEV_DATABASE_URL}
         pool_size: 10                 # optional
-        timeout: 30000                # optional, ms
+        timeout: 30000                # optional, ms — idle timeout
+        connect_timeout: 10000        # optional, ms — how long to wait to connect
+      prod:
+        dsn: ${PROD_DATABASE_URL}     # no TLS parameters in the DSN
+        ssl:
+          ca: /etc/ssl/aiven-ca.pem   # path, read at connect time
     security:                         # optional override, wins over the shared block
       allow_write: true
       blocked_env: [production, prod, staging]
@@ -54,7 +59,7 @@ providers:
     token: ${GITLAB_TOKEN}
     projectId: 12345
     security:
-      allow_write: true               # grant for gitlab_create_note
+      allow_write: true               # grant for the GitLab note tools (create/update/delete)
       blocked_env: [production]       # matched against the project path or ID
 
   redis:
@@ -109,6 +114,63 @@ today.
 Any other unknown top-level key is ignored silently — parsing is unvalidated, so
 typo'd keys fail quietly rather than erroring.
 
+### Database connection fields
+
+| Field | Description |
+| :--- | :--- |
+| `dsn` | `postgresql://`, `postgres://`, `mysql://`, or `mariadb://`. Percent-encode reserved characters in credentials |
+| `pool_size` | Maximum pooled connections (default `10`) |
+| `timeout` | **Idle** timeout in ms for a pooled connection (default `30000`) |
+| `connect_timeout` | How long to wait for a connection to be *established*, in ms (default `10000`). Without it a host that accepts TCP and then stalls would hold the tool call open indefinitely |
+| `ssl` | TLS settings, applied on top of the DSN — see [TLS and the DSN](#tls-and-the-dsn) |
+
+#### `ssl`
+
+| Field | Description |
+| :--- | :--- |
+| `ca` | Path to one or more PEM CA certificates to trust |
+| `cert` / `key` | Paths to a client certificate and its private key |
+| `rejectUnauthorized` | Verify the server certificate chain (default `true`). `false` encrypts without authenticating the server |
+
+`ca`, `cert`, and `key` are **paths, read at connect time** — never certificate
+contents in the config file, whose size and lifetime belong elsewhere. `show_config`
+reports the paths; the contents are never returned.
+
+#### TLS and the DSN
+
+A DSN says *how to reach* a server; `ssl` says *whether to trust it*. When a
+connection declares an `ssl` block, any TLS parameter in its DSN (`sslmode`,
+`sslrootcert`, `ssl=true`, `uselibpqcompat`) is removed before the connection is
+opened: `pg` merges the connection string *over* its options object, so a leftover
+DSN parameter would silently win and discard the block.
+
+`sslmode` cannot authenticate a **private CA** — the case for any managed backend
+that signs with its own project CA (Aiven, among others). On `pg` 8.x, `require`,
+`prefer`, and `verify-ca` are treated as aliases for `verify-full` (with a
+deprecation warning), so `sslmode=require` does **not** mean "encrypt, do not
+verify": Node verifies against the system CA bundle, does not find the private
+root, and fails with `SELF_SIGNED_CERT_IN_CHAIN` before authentication is even
+attempted. Two ways out, in order of preference:
+
+```yaml
+      prod:
+        dsn: ${PROD_DATABASE_URL}      # no TLS parameters in the DSN
+        ssl:
+          ca: /etc/ssl/aiven-ca.pem    # the project CA, from the provider's console
+```
+
+```yaml
+      prod:
+        dsn: ${PROD_DATABASE_URL}
+        ssl:
+          rejectUnauthorized: false    # encrypted, but the server is not authenticated
+```
+
+The first authenticates the server and is what a settled setup should use. The
+second keeps the traffic encrypted but accepts whatever certificate the endpoint
+presents, so it belongs to a local stopgap. `sslmode=no-verify`, or
+`uselibpqcompat=true&sslmode=require`, express the same trade-off at the DSN level.
+
 ### Redis connection fields
 
 A connection is either **standalone** (`url`) or **sentinel-backed**
@@ -152,7 +214,96 @@ providers:
 ```
 
 There is no separate environment-override layer: `${VAR}` interpolation is the
-only way environment variables affect configuration.
+only way environment variables affect configuration. A value can also be produced by a
+command instead — see below.
+
+### Command values (`cmd:`)
+
+A value **exactly** prefixed with `cmd:` is replaced by the stdout of that command, run
+through a shell. The same recursive walk as `${VAR}`, so it works in scalars, arrays, and
+nested maps alike.
+
+```yaml
+providers:
+  gitlab:
+    token: cmd:pass show gitlab/accountb
+```
+
+| Rule | Behaviour |
+| :--- | :--- |
+| Prefix | `startsWith("cmd:")` on the **raw** string, case-sensitive. `dsn: prefix-cmd:foo` is left alone |
+| Second order | `${VAR}` is expanded *after* the prefix test, so a variable that merely expands into `cmd:...` is never executed |
+| Body | `${VAR}` **is** expanded inside the command: `cmd:pass show gitlab/${ACCOUNT}` |
+| Working directory | `process.cwd()` |
+| stdin | closed. In MCP stdio mode stdin carries the JSON-RPC stream, and a helper that consumed it would corrupt the session |
+| Result | stdout with **one** trailing newline removed — not `trim()`, which would also eat leading whitespace a secret may contain |
+| Timeout | 5s |
+| Failure | resolves to `""` and warns on stderr, naming the key (`providers.gitlab.token`) and the exit status or the timeout. Never fatal, never a throw — see [When a command fails](#when-a-command-fails). The command's stdout and stderr are never included: stdout holds the secret, and stderr can repeat it |
+| Disabled provider | a `cmd:` under `providers.<name>.enabled: false` is not run at all |
+| Gate | `DEVTOOLS_ALLOW_CMD` — see below |
+
+#### The gate
+
+Running a command from a config file is a different order of risk from the rest of this
+file. Discovery walks up from the working directory, so **a cloned repository can supply
+a `.devtools/config.yaml`** — and every other key in it is data, where this one is code.
+
+The gate is `DEVTOOLS_ALLOW_CMD`, read from the environment:
+
+```bash
+DEVTOOLS_ALLOW_CMD=1
+```
+
+- `1` or `true`, case-insensitive, enables `cmd:`. Anything else — including unset —
+  disables it.
+- **It is deliberately not a config key.** A `security.allow_cmd: true` flag would be
+  self-granting: a repository that ships a `cmd:` could ship the flag that unlocks it, so
+  it would prevent accidents while looking like it prevented attacks. The environment is
+  the one thing a repository cannot write.
+- With the gate closed, a `cmd:` value resolves to `""` and a warning naming the key goes
+  to stderr. The load itself still succeeds — a config you merely cloned must not take
+  every unrelated tool down with it.
+- With the gate open, the command runs. If it fails, see
+  [When a command fails](#when-a-command-fails) below.
+- A `cmd:` under a provider block that declares `enabled: false` is not run at all. The
+  block still resolves and still shows; only the command is skipped.
+
+#### When a command fails
+
+A failed or timed-out command resolves to `""`, warns on stderr naming the key, and the
+load continues. It is never fatal, and that is deliberate: resolution walks the whole
+document before anything decides which provider the caller wants, so a failure at that
+point cannot know which tools it would have affected — and does not get to choose for
+them. A GitLab secret that cannot be fetched must not stop a config built around the
+database from starting.
+
+The damage is scoped at the point of use instead. The provider that wanted the value ends
+up with an empty one: an unusable GitLab token surfaces as `GITLAB_TOKEN_REQUIRED`, naming
+`gitlab_set_config`, which can repair it live without a restart. `show_config` marks every
+such key `resolved: false`, and a reload re-runs the command, so a fixed helper recovers on
+the next config edit.
+
+One consequence is worth stating plainly: under an MCP client, a helper that *prompts*
+cannot work. `pass` decrypts through gpg-agent, and gpg-agent asks pinentry on a TTY — but
+stdin is closed (see the table above), so the prompt can never be answered and the helper
+blocks until the timeout. `pass` therefore needs a preset passphrase
+(`gpg-preset-passphrase`); otherwise the
+[wrapper script](./MCP-Clients.md#injecting-secrets) — which fetches the secret and `exec`s
+the server, with no `cmd:` involved — is the way to use it.
+
+`show_config` reports which keys resolved this way — paths only, never values — so a
+`cmd:` inherited from someone else's repository is visible:
+
+```json
+"command_values": {
+  "enabled": false,
+  "values": [{ "key": "providers.gitlab.token", "resolved": false }]
+}
+```
+
+For a single secret, a wrapper script that exports the value before `exec`-ing the server
+is still the lower-risk option: no new config surface, and no gate to remember. See
+[MCP Clients](./MCP-Clients.md).
 
 ## Runtime store
 
@@ -198,9 +349,10 @@ misplaced block leaves that provider unconfigured rather than half-working.
 | Gate | Key read | Notes |
 | :--- | :--- | :--- |
 | Provider kill switch | `providers.<provider>.enabled` | Only an explicit `false` disables |
+| Command values (`cmd:`) | `DEVTOOLS_ALLOW_CMD` — **environment**, not config | **Grant: denied by default.** It cannot be granted from a config file, because a cloned repository must not be able to author its own code execution. With the gate closed nothing runs and the value becomes `""` |
 | Database writes | `providers.database.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Any statement not matching `/^\s*SELECT/i` counts as a write |
 | Redis writes | `providers.redis.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
-| GitLab writes | `providers.gitlab.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `gitlab_create_note` |
+| GitLab writes | `providers.gitlab.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
 | Database / Redis blocked identifiers | `providers.<provider>.security.blocked_env` → `security.blocked_env` | Case-insensitive substring match against the **connection name** — not the DSN |
 | GitLab blocked identifiers | `providers.gitlab.security.blocked_env` → `security.blocked_env` | GitLab has no environment concept, so the list is matched against the resolved **project path or numeric ID**, e.g. `group/production-app` |
 
@@ -219,29 +371,14 @@ Only one declared key is still inert:
 | :--- | :--- |
 | `codegraph` | **Not read.** Reserved for future codegraph tooling. |
 
-### Migrating from 0.1.x
+Credentials are never logged or returned in tool responses. `show_config` masks
+usernames, passwords, and sensitive query parameters in every DSN and Redis URL, and
+`providers_info` reports only `token_configured` / `auth_configured` booleans.
 
-`allow_write` used to be a **kill switch** for GitLab and Redis (absent meant
-allowed) and a **grant** for the database. It is now a grant everywhere, and
-`readonly` is gone. Both changes are breaking.
-
-| Old | New |
-| :--- | :--- |
-| `providers.{gitlab,redis}.security.allow_write: false` (opt-out) | `security.allow_write: true` (opt-in). GitLab and Redis writes are **blocked** until a config grants them |
-| `providers.database.security.allow_write: true` | unchanged |
-| `security.execute_query.{allow_write,blocked_env}` | `security.{allow_write,blocked_env}` — the old path is **removed**, not aliased |
-| `redis.connections.<name>.readonly: false` (allowed writes) | `security.allow_write: true`, and keep the connection out of `blocked_env` |
-| `redis.connections.<name>.readonly: true` (blocked writes) | add the connection name to `blocked_env` |
-| `database.connections.<name>.readonly` | ignored before, removed now — it never gated anything |
-| top-level `database` / `gitlab` / `redis` | ignored — move the block under `providers:` |
-| `providers.gitlab.security.blocked_env: []` | GitLab now inherits the shared list, so path matching applies unless you override it |
-
-Because a newly added connection is writable as soon as its provider is granted,
-the grant plus `blocked_env` are the whole protection — there is no per-connection
-fail-safe any more.
-
-Credentials are never logged or returned in tool responses; `show_config` and
-`providers_info` report only `token_configured` / `auth_configured` booleans.
+The one way to see a credential is `show_config` with `show_credentials: true`. That
+unmasks connections named `local`, `dev`, or `development` only — every other connection
+stays sanitized. It is off by default because the value becomes part of the model's
+context and the session transcript.
 
 ## Live reload
 
@@ -315,7 +452,7 @@ Known limits:
 
 | Concern | File |
 | :--- | :--- |
-| Discovery, parsing, `${VAR}` resolution | `src/core/config.ts` |
+| Discovery, parsing, `${VAR}` and `cmd:` resolution | `src/core/config.ts` |
 | Types (`Config`, `ProvidersConfig`, provider configs) | `src/core/types.ts` |
 | GitLab client build + freshness fingerprint | `src/providers/gitlab.ts` |
 | Runtime store, load state, reload errors | `src/core/runtime-config.ts` |

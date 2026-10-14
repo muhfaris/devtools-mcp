@@ -19,12 +19,20 @@ providers:
     connections:
       dev:
         dsn: ${DEV_DATABASE_URL}
-        readonly: false
         pool_size: 10 # optional, default 10
         timeout: 30000 # optional, idle timeout ms, default 30000
+        connect_timeout: 10000 # optional, ms to establish a connection, default 10000
       staging:
         dsn: ${STAGING_DATABASE_URL}
-        readonly: true
+      # A managed backend signed by a private CA (Aiven and the like) cannot be
+      # authenticated by a DSN `sslmode`, which only ever checks the system CA store.
+      # Point `ssl.ca` at the project CA, or set `rejectUnauthorized: false` to keep the
+      # traffic encrypted without authenticating the server. See docs/Configuration.md.
+      # prod:
+      #   dsn: ${PROD_DATABASE_URL}
+      #   ssl:
+      #     ca: /etc/ssl/aiven-ca.pem
+      #     # rejectUnauthorized: false
     security:
       allow_write: false # allow non-SELECT queries
       blocked_env: [production, prod]
@@ -34,6 +42,8 @@ providers:
     enabled: true
     url: https://gitlab.com # or self-hosted instance
     token: ${GITLAB_TOKEN} # PAT with api scope
+    # Or resolve it by command; requires DEVTOOLS_ALLOW_CMD=1 in the environment. See docs/Configuration.md.
+    # token: cmd:pass show gitlab/accountb
     projectId: 12345 # numeric ID or path (group/repo)
     security:
       blocked_env: [production, prod] # protects create_note, etc.
@@ -45,12 +55,10 @@ providers:
     connections:
       dev:
         url: ${REDIS_URL}
-        readonly: true
         db: 0 # optional, default 0
         timeout: 5000 # optional, connect timeout ms, default 5000
       cache:
         url: redis://localhost:6379/1
-        readonly: true
     security:
       allow_write: false
       blocked_env: [production, prod]

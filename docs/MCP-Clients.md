@@ -30,23 +30,30 @@ Choose your client below and follow the specific instructions.
 ### Project-scoped (recommended)
 
 ```bash
-claude mcp add devtools --project -- npx @muhfaris/devtools
+claude mcp add devtools --scope project -- npx -y @muhfaris/devtools
 ```
 
 ### User-scoped (all projects)
 
 ```bash
-claude mcp add devtools --user -- npx @muhfaris/devtools
+claude mcp add devtools --scope user -- npx -y @muhfaris/devtools
 ```
 
 ### With environment variables
 
+`-e`/`--env` must come **before** the `--` separator. After it, the flag is passed to
+`npx` as an argument and the variable never reaches the server.
+
 ```bash
-claude mcp add devtools --project -- \
-  --env DEV_DATABASE_URL="postgresql://user:pass@localhost:5432/mydb" \
-  --env GITLAB_TOKEN="glpat-xxx" \
-  npx @muhfaris/devtools
+claude mcp add devtools --scope user \
+  -e GITLAB_TOKEN="glpat-xxx" \
+  -e DEV_DATABASE_URL="postgresql://user:pass@localhost:5432/mydb" \
+  -- npx -y @muhfaris/devtools
 ```
+
+The shell resolves these once, at `add` time, and Claude stores the result in
+`~/.claude.json`. See [Injecting secrets](#injecting-secrets) if you would rather not
+leave a token there.
 
 ### Verify connection
 
@@ -149,6 +156,13 @@ env = {
 }
 ```
 
+> **This `cmd:` is CodeCompanion's, not the server's.** CodeCompanion runs the command and
+> passes its stdout as the env var. It is safe here because the snippet lives in your nvim
+> config, which only you write. The server has a separate, unrelated `cmd:` for values in
+> `.devtools/config.yaml` that is **denied by default** — see
+> [Command values](./Configuration.md#command-values-cmd). Configuring one does not
+> configure the other, and this nvim snippet will not make a server-side `cmd:` work.
+
 ### Local development with Bun
 
 ```lua
@@ -178,16 +192,95 @@ env = {
 
 ## Codex CLI
 
-`~/.codex/config.toml`:
+```bash
+codex mcp add devtools \
+  --env GITLAB_TOKEN="glpat-xxx" \
+  --env DEV_DATABASE_URL="postgresql://user:pass@localhost:5432/mydb" \
+  -- npx -y @muhfaris/devtools
+```
+
+`codex mcp add` has no `cwd` or `env_vars` flag, so add these to `~/.codex/config.toml`
+afterwards:
 
 ```toml
 [mcp_servers.devtools]
-command = "devtools-mcp"
-args = []
-env = { DEV_DATABASE_URL = "postgres://user:pass@localhost:5432/mydb" }
+command = "npx"
+args = ["-y", "@muhfaris/devtools"]
+cwd = "/path/to/your/project"
+env_vars = ["GITLAB_TOKEN", "DEV_DATABASE_URL"]
 ```
 
+- `cwd` pins the project root. The server discovers `.devtools/config.yaml` by walking
+  up from its working directory, and reads `.env` from exactly that directory, so pinning
+  it makes both deterministic.
+- `env_vars` forwards a variable from the shell that launched Codex. Prefer it over
+  `env`: the token stays in your shell and never enters `config.toml`.
+
 Verify with `/mcp` in the Codex TUI after restart.
+
+---
+
+## Injecting secrets
+
+Three ways, from least to most new surface.
+
+### 1. Wrapper script — recommended for a single secret
+
+Put it on your `PATH`. Nothing secret is written to a client config file, and the value
+is resolved fresh on every launch.
+
+```bash
+#!/usr/bin/env bash
+# ~/.local/bin/devtools-mcp
+set -euo pipefail
+export GITLAB_TOKEN="$(pass show gitlab/accountb)"
+exec npx -y @muhfaris/devtools "$@"
+```
+
+```bash
+chmod +x ~/.local/bin/devtools-mcp
+claude mcp add devtools --scope user -- ~/.local/bin/devtools-mcp
+```
+
+```toml
+[mcp_servers.devtools]
+command = "/home/you/.local/bin/devtools-mcp"
+args = []
+cwd = "/path/to/your/project"
+```
+
+### 2. Client-side env injection
+
+`-e` for Claude Code, `--env` for Codex. Both resolve the value at configuration time
+and store the **result**: `~/.claude.json` for Claude, `config.toml` for Codex. Prefer
+Codex's `env_vars`, which names the variable and reads it from the launching shell
+instead of storing it.
+
+### 3. The server's `cmd:` value, in `.devtools/config.yaml`
+
+One file, and it works for every client:
+
+```yaml
+providers:
+  gitlab:
+    token: cmd:pass show gitlab/accountb
+```
+
+Read the gate first. Command values are **denied by default**, and the grant is an
+environment variable rather than a config key — because a cloned repository can supply a
+`.devtools/config.yaml`, and a config-file grant would let that repository unlock its own
+code execution. Put `DEVTOOLS_ALLOW_CMD=1` in the environment the server is launched
+with (any of the three places above) to enable it. Full rules:
+[Command values](./Configuration.md#command-values-cmd).
+
+A `$(pass show ...)` or backtick substitution in the YAML is **not** this feature and will
+not work — see [Troubleshooting](#troubleshooting).
+
+Neither does a `cmd:` that *prompts*. `pass` and `op` ask for a passphrase on a TTY, and
+stdin is closed here because it carries the JSON-RPC stream — so the prompt is never
+answered and the command blocks until its 5s timeout. Preset the passphrase in gpg-agent,
+or use the [wrapper script](#injecting-secrets) above, which fetches the secret itself and
+`exec`s the server.
 
 ---
 
@@ -259,6 +352,7 @@ Desktop), add this to your `mcpServers` map:
 | `GITLAB_URL`           | GitLab tools (optional)   | GitLab instance URL                    | `https://gitlab.com`                         |
 | `DEV_DATABASE_URL`     | Database tools            | PostgreSQL/MySQL connection string     | `postgresql://user:pass@localhost:5432/mydb` |
 | `STAGING_DATABASE_URL` | Database tools (optional) | Staging database connection            | `postgresql://user:pass@staging:5432/mydb`   |
+| `DEVTOOLS_ALLOW_CMD`   | `cmd:` config values      | Enables command values in the config. `1` or `true` | `1`                                          |
 
 ---
 
@@ -283,6 +377,12 @@ which npx
 1. Ensure token has `api` scope.
 2. Regenerate a new token.
 3. Verify token is set correctly in environment.
+
+If the token is written as `$(pass show ...)` or `` `pass show ...` `` in
+`.devtools/config.yaml`, that is the bug. Neither is a supported substitution: `${VAR}`
+is the only interpolation, so the shell syntax is passed through verbatim as the token
+and GitLab rejects it. Use a server-side `cmd:` value, or a
+[wrapper script](#injecting-secrets).
 
 ### Database connection errors
 
@@ -328,12 +428,21 @@ providers:
 
 Percent-encode reserved characters in credentials. For example, the password
 `p@ss:word` becomes `p%40ss%3Aword` in the DSN. Common optional query parameters
-include PostgreSQL `?sslmode=require` and MySQL/MariaDB `?ssl=true`.
+include PostgreSQL `?sslmode=require` and MySQL/MariaDB `?ssl=true` — but on
+PostgreSQL `sslmode=require` means *verify against the system CA bundle*, so it
+fails against a backend signed by a private CA (Aiven and other managed hosts).
+Use the `ssl` block for those instead — see
+[TLS and the DSN](./Configuration.md#tls-and-the-dsn).
 
 1. Confirm that the DSN scheme matches `default_engine`.
 2. Ensure the database is running and reachable on the configured host and port.
 3. Verify the database name, credentials, and permissions.
 4. Test connectivity with `psql` for PostgreSQL or `mysql` for MySQL/MariaDB.
+
+Run `providers_info` with `live: true` first: every probe that fails now carries a
+`failure` with a `reason`, a driver `code`, and a `hint`, so `SELF_SIGNED_CERT_IN_CHAIN`
+(`tls_certificate_untrusted`) is distinguishable from a bad password
+(`authentication_failed`) or a host that is not listening (`connection_refused`).
 
 ### Schema introspection returns empty
 

@@ -1,5 +1,10 @@
 import { Pool, PoolClient } from "pg";
 import type { ConnectionConfig } from "../core/types.js";
+import {
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  buildTlsOptions,
+  stripTlsParams,
+} from "./tls.js";
 import type {
   DBProvider,
   SchemaInfo,
@@ -10,6 +15,26 @@ import type {
   Relationship,
 } from "./interface.js";
 
+/**
+ * The pool options for one connection.
+ *
+ * Exported so the TLS merge can be tested without a live server — the failure this
+ * replaces (`SELF_SIGNED_CERT_IN_CHAIN` against a managed endpoint) is not reproducible
+ * on demand, and a rule this easy to invert deserves a test that does not need one.
+ */
+export const buildPoolOptions = (config: ConnectionConfig) => {
+  const ssl = buildTlsOptions(config.ssl);
+
+  return {
+    connectionString: ssl ? stripTlsParams(config.dsn) : config.dsn,
+    max: config.pool_size || 10,
+    idleTimeoutMillis: config.timeout || 30000,
+    connectionTimeoutMillis:
+      config.connect_timeout || DEFAULT_CONNECT_TIMEOUT_MS,
+    ...(ssl ? { ssl } : {}),
+  };
+};
+
 export class PostgresProvider implements DBProvider {
   private pool: Pool | null = null;
   private client: PoolClient | null = null;
@@ -17,11 +42,7 @@ export class PostgresProvider implements DBProvider {
 
   async connect(config: ConnectionConfig): Promise<void> {
     this.config = config;
-    this.pool = new Pool({
-      connectionString: config.dsn,
-      max: config.pool_size || 10,
-      idleTimeoutMillis: config.timeout || 30000,
-    });
+    this.pool = new Pool(buildPoolOptions(config));
     this.client = await this.pool.connect();
   }
 

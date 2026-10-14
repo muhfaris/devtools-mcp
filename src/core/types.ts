@@ -112,10 +112,45 @@ export interface DatabaseConfig {
   connections: Record<string, ConnectionConfig>;
 }
 
+/**
+ * TLS settings for a connection, applied on top of its DSN.
+ *
+ * `ca`, `cert`, and `key` are **file paths**, read at connect time: a certificate is far
+ * too large to keep in a config file, and a path lets `show_config` report the setting
+ * without ever holding the secret. A backend signed by a private CA — Aiven's per-project
+ * CA, for one — is the case this exists for, and a DSN `sslmode` cannot express it.
+ */
+export interface ConnectionTlsConfig {
+  /** Path to one or more PEM CA certificates to trust. */
+  ca?: string;
+  /** Path to a client certificate. */
+  cert?: string;
+  /** Path to the private key for `cert`. */
+  key?: string;
+  /**
+   * Verify the server certificate chain. Defaults to the driver's own default (`true`).
+   * Setting `false` encrypts without authenticating the server, so it belongs to a local
+   * stopgap, not a settled setup.
+   */
+  rejectUnauthorized?: boolean;
+}
+
 export interface ConnectionConfig {
   dsn: string;
   pool_size?: number;
+  /** Idle timeout in ms for a pooled connection. Default 30000. */
   timeout?: number;
+  /**
+   * How long to wait for a connection to be established, in ms. Default 10000 — without
+   * it a host that accepts TCP and then stalls holds the tool open forever (PRD 5:
+   * a provider call may not hang).
+   */
+  connect_timeout?: number;
+  /**
+   * TLS settings, which supersede any TLS parameter the DSN carries. A DSN says how to
+   * reach a server; this says whether to trust it.
+   */
+  ssl?: ConnectionTlsConfig;
 }
 
 export interface SecurityConfig {
