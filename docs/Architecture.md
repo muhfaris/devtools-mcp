@@ -287,7 +287,7 @@ sequenceDiagram
 | :--- | :--- |
 | Token security | Tokens from env vars, or supplied at runtime by `gitlab_set_config` |
 | No token echo | Tokens never appear in responses |
-| Write gate | `gitlab_create_note`, `gitlab_update_note`, and `gitlab_delete_note` are denied until writes are granted |
+| Write gate | `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`, `gitlab_update_note`, and `gitlab_delete_note` are denied until writes are granted |
 | Project blocking | `blocked_env` matched against the resolved project path or ID; GitLab inherits the shared list |
 | Rate limiting | Respects GitLab API limits |
 

@@ -81,12 +81,14 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `gitlab_get_commits` | Commit history for a branch, tag, or path (remote `git log`). One page of `limit`; commit bodies need `include_messages: true` |
 | `gitlab_compare_branches` | Compare refs: commits, a per-file change list, and conflict status. Patches are opt-in (`include_diff: true`) |
 | `gitlab_search_code` | Search code, symbols, or text across a repo (remote `git grep`). One page |
+| `gitlab_create_mr` | Open a merge request from an existing source branch. Does not merge, approve, or assign |
+| `gitlab_update_mr` | Change an MR's target branch, title, or description. Only the fields you pass change; it does not merge or close |
 | `gitlab_create_note` | Add a comment to an MR (inline diff comments supported) |
 | `gitlab_update_note` | Edit an existing MR comment — for when a review comment was wrong |
 | `gitlab_delete_note` | Delete an MR comment (needs `confirm: true`) |
 | `gitlab_set_config` | Set GitLab token/URL/projectId for the session |
 
-> The GitLab write tools are `gitlab_create_note`, `gitlab_update_note`, and `gitlab_delete_note`. Writes are **denied by default**: enable them with `security.allow_write: true` (or `providers.gitlab.security.allow_write: true`), and keep the resolved project path/ID out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
+> The GitLab write tools are `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`, `gitlab_update_note`, and `gitlab_delete_note`. Writes are **denied by default**: enable them with `security.allow_write: true` (or `providers.gitlab.security.allow_write: true`), and keep the resolved project path/ID out of `blocked_env`, which defaults to `[production, prod]`. See [Configuration](./Configuration.md#what-is-actually-enforced).
 >
 > `show_config` lists any config key that nothing reads under `ignored_keys`. A guard
 > that is not wired to anything — a misspelled key, a block that moved — appears there

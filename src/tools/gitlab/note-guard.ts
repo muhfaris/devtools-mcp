@@ -7,23 +7,28 @@ import {
 } from "../../core/security.js";
 import { resolveMrId, resolveProjectId } from "../../providers/gitlab.js";
 
-export type NoteTarget = {
+export type WriteTarget = {
   projectId: string | number;
-  mrId: number;
   config: Config;
 };
 
+export type NoteTarget = WriteTarget & {
+  mrId: number;
+};
+
 /**
- * The checks every GitLab note write shares, ordered so the caller gets the cheapest
+ * The checks every GitLab write shares, ordered so the caller gets the cheapest
  * failure first: is GitLab configured, are writes granted, is this project blocked.
+ * It resolves the project only; a caller that also needs a merge request id adds
+ * `resolveMrId` (see `assertNoteWriteAllowed`).
  *
  * These deliberately repeat the guards inside `gitlab_create_note` rather than being
  * shared with it. That file's inline-comment positions are still awaiting live
  * verification, and moving its guards would put an unrelated change on the same build.
  */
-export const assertNoteWriteAllowed = (
+export const assertGitLabWriteAllowed = (
   params: Record<string, any>,
-): NoteTarget => {
+): WriteTarget => {
   const config = (global as any).__devtools_config;
 
   if (config?.providers?.gitlab?.enabled === false) {
@@ -69,6 +74,14 @@ export const assertNoteWriteAllowed = (
     );
   }
 
+  return { projectId, config };
+};
+
+/** The write guard, plus the merge request the note belongs to. */
+export const assertNoteWriteAllowed = (
+  params: Record<string, any>,
+): NoteTarget => {
+  const { projectId, config } = assertGitLabWriteAllowed(params);
   return { projectId, mrId: resolveMrId(params), config };
 };
 

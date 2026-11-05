@@ -20,6 +20,8 @@ import { executeQueryTool } from "./database/query.js";
 import { explainQueryTool } from "./database/explain.js";
 import { gitlabListMrsTool } from "./gitlab/list-mrs.js";
 import { gitlabGetMrTool } from "./gitlab/get-mr.js";
+import { gitlabCreateMrTool } from "./gitlab/create-mr.js";
+import { gitlabUpdateMrTool } from "./gitlab/update-mr.js";
 import { gitlabCreateNoteTool } from "./gitlab/create-note.js";
 import { gitlabUpdateNoteTool } from "./gitlab/update-note.js";
 import { gitlabDeleteNoteTool } from "./gitlab/delete-note.js";
@@ -80,6 +82,8 @@ export const registerAllTools = async (
   registry.register(portCheckTool);
   registry.register(gitlabListMrsTool);
   registry.register(gitlabGetMrTool);
+  registry.register(gitlabCreateMrTool);
+  registry.register(gitlabUpdateMrTool);
   registry.register(gitlabCreateNoteTool);
   registry.register(gitlabUpdateNoteTool);
   registry.register(gitlabDeleteNoteTool);

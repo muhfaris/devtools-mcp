@@ -52,7 +52,7 @@ command to your shell.
 | Encoding & security | `base64_encode`, `base64_decode`, `jwt_decode`, `hash_generate`, `secret_generate`, `regex_test` |
 | Dummy data | `fake_person`, `fake_company`, `public_holidays` — locales `en`, `id`, `my`, `sg` |
 | JSON | `json_format`, `json_minify`, `json_validate`, `json_to_types` |
-| GitLab | `gitlab_list_mrs`, `gitlab_get_mr`, `gitlab_review_mr`, `gitlab_get_mr_discussions`, `gitlab_get_file`, `gitlab_get_commits`, `gitlab_compare_branches`, `gitlab_search_code`, `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
+| GitLab | `gitlab_list_mrs`, `gitlab_get_mr`, `gitlab_review_mr`, `gitlab_get_mr_discussions`, `gitlab_get_file`, `gitlab_get_commits`, `gitlab_compare_branches`, `gitlab_search_code`, `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
 | Database | `get_db_schema`, `execute_query`, `explain_query`, `database_set_connection` |
 | Redis | `redis_info`, `redis_list_keys`, `redis_get_key`, `redis_key_info`, `redis_slowlog`, `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
 | Config | `show_config`, `providers_info`, `config_init`, `reload_config`, `gitlab_set_config` |
@@ -63,8 +63,8 @@ Full parameters and CLI examples: [Tools](https://github.com/muhfaris/devtools-m
 ## Writes are denied by default
 
 Tools that mutate — `execute_query`, `redis_set_key`, `redis_delete_key`,
-`redis_expire_key`, `gitlab_create_note`, `gitlab_update_note`,
-`gitlab_delete_note` — refuse to run until you grant them.
+`redis_expire_key`, `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`,
+`gitlab_update_note`, `gitlab_delete_note` — refuse to run until you grant them.
 
 - `allow_write` is an explicit **grant**: `false` by default, resolvable per
   provider (`providers.<name>.security.allow_write`), falling back to
