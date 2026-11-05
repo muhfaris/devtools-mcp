@@ -10,6 +10,12 @@
 id_generator:
   default: ulid # ulid | uuid
 
+# --- Shared defaults for every provider ----------------------------
+# A providers.<name>.security block overrides these for that provider.
+# security:
+#   allow_write: false # grant writes for every provider at once
+#   blocked_env: [production, prod]
+
 # --- Providers -----------------------------------------------------
 providers:
   # --- Database ---------------------------------------------------
@@ -22,6 +28,7 @@ providers:
         pool_size: 10 # optional, default 10
         timeout: 30000 # optional, idle timeout ms, default 30000
         connect_timeout: 10000 # optional, ms to establish a connection, default 10000
+        # readonly: true # hard write deny for this connection; outranks allow_write
       staging:
         dsn: ${STAGING_DATABASE_URL}
       # A managed backend signed by a private CA (Aiven and the like) cannot be
@@ -32,6 +39,8 @@ providers:
       #   dsn: ${PROD_DATABASE_URL}
       #   ssl:
       #     ca: /etc/ssl/aiven-ca.pem
+      #     # cert: /etc/ssl/client.pem # client certificate, when the server demands one
+      #     # key: /etc/ssl/client-key.pem
       #     # rejectUnauthorized: false
     security:
       allow_write: false # allow non-SELECT queries
@@ -46,7 +55,8 @@ providers:
     # token: cmd:pass show gitlab/accountb
     projectId: 12345 # numeric ID or path (group/repo)
     security:
-      blocked_env: [production, prod] # protects create_note, etc.
+      allow_write: false # grants gitlab_create_mr, update_mr, create_note, update_note, delete_note
+      blocked_env: [production, prod] # matched against the project path or ID
 
   # --- Redis ------------------------------------------------------
   redis:
@@ -59,6 +69,22 @@ providers:
         timeout: 5000 # optional, connect timeout ms, default 5000
       cache:
         url: redis://localhost:6379/1
+      # A Sentinel-managed instance: `sentinels` replaces `url` and the master is found
+      # by name. `role: slave` reads from a replica. See docs/Configuration.md.
+      # sentinel:
+      #   sentinels:
+      #     - { host: 10.0.0.1, port: 26379 }
+      #     - { host: 10.0.0.2, port: 26379 }
+      #   master_name: mymaster
+      #   role: master # master | slave
+      #   sentinel_username: sentinel-user
+      #   sentinel_password: ${REDIS_SENTINEL_PASSWORD}
+      #   sentinel_tls: true
+      #   username: app-user
+      #   password: ${REDIS_PASSWORD}
+      #   db: 0
+      #   timeout: 5000
+      #   readonly: true
     security:
       allow_write: false
       blocked_env: [production, prod]
