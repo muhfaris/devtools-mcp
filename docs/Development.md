@@ -93,7 +93,8 @@ on Node 20 (the `engines` floor) and Node 22:
 `.github/workflows/publish.yml` publishes when a GitHub release is published. It
 typechecks, compares the release tag with the `package.json` version, then runs
 `npm publish --provenance`. `prepublishOnly` builds and runs the unit tests, so a
-failing tree cannot be published — locally or from CI.
+failing tree cannot be published — locally or from CI. The job runs Node 22 and
+installs npm 11, because Trusted Publishing needs npm ≥ 11.5.1.
 
 Setup, once: add an npm **automation token** as the `NPM_TOKEN` repository secret.
 npm only attaches a Trusted Publisher to a package that already exists, so the first
