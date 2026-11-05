@@ -96,9 +96,13 @@ typechecks, compares the release tag with the `package.json` version, then runs
 failing tree cannot be published — locally or from CI.
 
 Setup, once: add an npm **automation token** as the `NPM_TOKEN` repository secret.
-Provenance requires the repository to be public. After the first publish, prefer
-npm Trusted Publishing (package settings → Trusted Publisher → GitHub Actions) and
-delete the secret.
+npm only attaches a Trusted Publisher to a package that already exists, so the first
+publish needs the token. Provenance requires a public repository.
+
+After that first publish, configure package settings → Trusted Publisher → GitHub
+Actions for this repository and workflow `publish.yml`, then delete the `NPM_TOKEN`
+secret. The workflow reads the secret once and picks the OIDC path when it is
+absent, so no further edit is needed.
 
 Release flow:
 
