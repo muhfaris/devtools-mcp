@@ -77,6 +77,13 @@ const KNOWN: KnownNode = {
       token: null,
       projectId: null,
     },
+    github: {
+      enabled: null,
+      security: SECURITY,
+      url: null,
+      token: null,
+      repo: null,
+    },
   },
 };
 
@@ -91,6 +98,8 @@ const HINTS: Record<string, string> = {
     "Providers live under `providers:`. Move this block to `providers.redis`.",
   gitlab:
     "Providers live under `providers:`. Move this block to `providers.gitlab`.",
+  github:
+    "Providers live under `providers:`. Move this block to `providers.github`.",
   execute_query:
     "The top-level `execute_query` block is gone. The write grant is `security.allow_write` (top level or `providers.database.security`).",
   enabled:
@@ -98,6 +107,8 @@ const HINTS: Record<string, string> = {
   // Path-qualified because the replacement depends on where the key was written.
   "providers.gitlab.host":
     "The GitLab instance address is `url` (e.g. `url: https://gitlab.example.com`).",
+  "providers.github.host":
+    "The GitHub instance address is `url` (e.g. `url: https://github.com`).",
 };
 
 /** Keys nested under something whose name is not fixed (connections, sentinels). */

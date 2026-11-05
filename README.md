@@ -43,7 +43,7 @@ Cursor, CodeCompanion.nvim, Codex CLI, and MCP Inspector setups live in
 
 ## What's included
 
-**53 tools**, each exposed twice — as an MCP tool to your agent and as a CLI
+**68 tools**, each exposed twice — as an MCP tool to your agent and as a CLI
 command to your shell.
 
 | Area | Tools |
@@ -53,9 +53,10 @@ command to your shell.
 | Dummy data | `fake_person`, `fake_company`, `public_holidays` — locales `en`, `id`, `my`, `sg` |
 | JSON | `json_format`, `json_minify`, `json_validate`, `json_to_types` |
 | GitLab | `gitlab_list_mrs`, `gitlab_get_mr`, `gitlab_review_mr`, `gitlab_get_mr_discussions`, `gitlab_get_file`, `gitlab_get_commits`, `gitlab_compare_branches`, `gitlab_search_code`, `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
+| GitHub | `github_list_prs`, `github_get_pr`, `github_review_pr`, `github_get_pr_discussions`, `github_get_file`, `github_get_commits`, `github_compare_branches`, `github_search_code`, `github_create_pr`, `github_update_pr`, `github_create_comment`, `github_update_comment`, `github_delete_comment` |
 | Database | `get_db_schema`, `execute_query`, `explain_query`, `database_set_connection` |
 | Redis | `redis_info`, `redis_list_keys`, `redis_get_key`, `redis_key_info`, `redis_slowlog`, `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
-| Config | `show_config`, `providers_info`, `config_init`, `reload_config`, `gitlab_set_config` |
+| Config | `show_config`, `providers_info`, `config_init`, `reload_config`, `gitlab_set_config`, `github_set_config` |
 | Misc | `cron_parse`, `timezone_convert`, `semver_bump`, `slugify`, `diff`, `env_diff`, `port_check` |
 
 Full parameters and CLI examples: [Tools](https://github.com/muhfaris/devtools-mcp/blob/main/docs/Tools.md).
@@ -64,7 +65,9 @@ Full parameters and CLI examples: [Tools](https://github.com/muhfaris/devtools-m
 
 Tools that mutate — `execute_query`, `redis_set_key`, `redis_delete_key`,
 `redis_expire_key`, `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`,
-`gitlab_update_note`, `gitlab_delete_note` — refuse to run until you grant them.
+`gitlab_update_note`, `gitlab_delete_note`, `github_create_pr`,
+`github_update_pr`, `github_create_comment`, `github_update_comment`,
+`github_delete_comment` — refuse to run until you grant them.
 
 - `allow_write` is an explicit **grant**: `false` by default, resolvable per
   provider (`providers.<name>.security.allow_write`), falling back to

@@ -66,6 +66,15 @@ providers:
       allow_write: true               # grant for the GitLab note tools (create/update/delete)
       blocked_env: [production]       # matched against the project path or ID
 
+  github:
+    enabled: true
+    url: https://github.com            # web host; the API base is derived (/api/v3 on GHES)
+    token: ${GITHUB_TOKEN}
+    repo: owner/repo
+    security:
+      allow_write: true                # grant for the GitHub PR/comment tools
+      blocked_env: [production]        # matched against the resolved owner/repo
+
   redis:
     enabled: true
     default_connection: dev
@@ -330,7 +339,7 @@ The exact expressions in code are:
 
 | Value | Resolution chain | Default |
 | :--- | :--- | :--- |
-| Database / GitLab / Redis config | `providers.<provider>` — no top-level fallback | — |
+| Database / GitLab / GitHub / Redis config | `providers.<provider>` — no top-level fallback | — |
 | Database engine | `providers.database.default_engine` | `postgresql` |
 | Per-connection write deny | `providers.<provider>.connections.<name>.readonly`, never overridable | absent (writes follow the grant) |
 | Engine actually answering | `SELECT VERSION()` at connect, falling back to `default_engine` | — |
@@ -338,6 +347,7 @@ The exact expressions in code are:
 | Write gate (any provider) | `providers.<provider>.security.allow_write` ?? `security.allow_write` ?? `false` | `false` |
 | Blocked identifiers (any provider) | `providers.<provider>.security.blocked_env` ?? `security.blocked_env` ?? `[production, prod]` | `[production, prod]` |
 | GitLab project | `params.project_id` ?? `providers.gitlab.projectId` | — |
+| GitHub repo | `params.repo` (a PR URL also infers it) ?? `providers.github.repo` | — |
 
 Both security keys resolve through **one chain, for every provider**:
 
@@ -350,7 +360,7 @@ Both security keys resolve through **one chain, for every provider**:
 - `security.execute_query.*` was the older home of these keys. It is **gone** — not
   deprecated, not aliased. Move the block up to `security.*`.
 
-A top-level `database`, `gitlab`, or `redis` block is **not read**. It is not a legacy
+A top-level `database`, `gitlab`, `github`, or `redis` block is **not read**. It is not a legacy
 spelling: the only place a provider is read from is `providers.<provider>`, so a
 misplaced block leaves that provider unconfigured rather than half-working. Every such
 block is reported by `show_config` under `ignored_keys`, with a hint naming where it
@@ -367,8 +377,10 @@ belongs.
 | Database writes | `providers.database.security.allow_write` → `security.allow_write` | **Grant: denied by default.** A statement is a write unless it opens with a read verb (`SELECT`, `SHOW`, `EXPLAIN`, `WITH`, ...) *and* contains no write verb outside its sub-queries — `WITH x AS (...) UPDATE ...` and `SELECT 1; DROP TABLE t` both count as writes |
 | Redis writes | `providers.redis.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `redis_set_key`, `redis_delete_key`, `redis_expire_key` |
 | GitLab writes | `providers.gitlab.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `gitlab_create_mr`, `gitlab_update_mr`, `gitlab_create_note`, `gitlab_update_note`, `gitlab_delete_note` |
+| GitHub writes | `providers.github.security.allow_write` → `security.allow_write` | **Grant: denied by default.** Applies to `github_create_pr`, `github_update_pr`, `github_create_comment`, `github_update_comment`, `github_delete_comment` |
 | Database / Redis blocked identifiers | `providers.<provider>.security.blocked_env` → `security.blocked_env` | Case-insensitive substring match against the **connection name** — not the DSN |
 | GitLab blocked identifiers | `providers.gitlab.security.blocked_env` → `security.blocked_env` | GitLab has no environment concept, so the list is matched against the resolved **project path or numeric ID**, e.g. `group/production-app` |
+| GitHub blocked identifiers | `providers.github.security.blocked_env` → `security.blocked_env` | Matched against the resolved **`owner/name`** repository, e.g. `acme/production-widget` |
 | Per-connection write deny | `providers.<provider>.connections.<name>.readonly` | **Deny: outranks the grant.** No value of `allow_write` permits a write here. Reported per connection by `show_config` as `write_policy` |
 
 There are two per-connection controls, and they answer different questions.
@@ -494,6 +506,7 @@ The `config_init` tool scaffolds a starter file. It writes:
 - a top-level `security` block with `allow_write: false` and
   `blocked_env: [production, prod]`
 - `providers.gitlab` with `enabled`, `url`, `token`, `projectId`
+- `providers.github` with `enabled`, `url`, `token`, `repo`
 - `providers.redis` with `enabled`, `default_connection`, `connections`
 
 Known limits:
@@ -517,6 +530,7 @@ Known limits:
 | Discovery, parsing, `${VAR}` and `cmd:` resolution | `src/core/config.ts` |
 | Types (`Config`, `ProvidersConfig`, provider configs) | `src/core/types.ts` |
 | GitLab client build + freshness fingerprint | `src/providers/gitlab.ts` |
+| GitHub REST client + freshness fingerprint | `src/providers/github.ts` |
 | Runtime store, load state, reload errors | `src/core/runtime-config.ts` |
 | Write/blocked-env/readonly policy resolution | `src/core/security.ts` |
 | Known config keys, ignored-key findings | `src/core/known-keys.ts` |
@@ -525,6 +539,8 @@ Known limits:
 | Database write/blocked-env gates | `src/tools/database/query.ts` |
 | Redis write/blocked-env gates | `src/providers/redis-helper.ts` |
 | GitLab init, enabled gate | `src/providers/gitlab.ts` |
+| GitHub init, enabled gate | `src/providers/github.ts` |
+| GitHub write/blocked-env gates | `src/tools/github/guard.ts` |
 | Redacted config view | `src/tools/config/show.ts` |
 | Starter file generation | `src/tools/misc/config-init.ts` |
 | Identifier format resolution | `src/tools/id-generators/id.ts` |

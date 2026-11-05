@@ -39,7 +39,7 @@ export const resolveAllowWrite = (
  * provider block, the shared block, then the built-in default.
  *
  * The identifier is the connection name for `database` and `redis`, and the resolved
- * project path or ID for `gitlab`.
+ * project path or ID for `gitlab`, the resolved `owner/name` repo for `github`.
  */
 export const resolveBlockedEnvs = (
   config: Config,

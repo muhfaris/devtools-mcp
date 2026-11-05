@@ -69,7 +69,7 @@ const listConnections = (
 export const configInitTool: Tool = {
   name: "config_init",
   description:
-    "Create a starter .devtools/config.yaml with the requested provider connections (database, gitlab, redis); refuses to overwrite an existing config",
+    "Create a starter .devtools/config.yaml with the requested provider connections (database, gitlab, github, redis); refuses to overwrite an existing config",
   params: {
     database: {
       type: "array",
@@ -82,6 +82,12 @@ export const configInitTool: Tool = {
       optional: true,
       description:
         "GitLab config: { url?, token?, projectId?, tokenEnv? } where tokenEnv names a ${VAR} placeholder",
+    },
+    github: {
+      type: "object",
+      optional: true,
+      description:
+        "GitHub config: { url?, token?, repo?, tokenEnv? } where tokenEnv names a ${VAR} placeholder and repo is 'owner/name'",
     },
     redis: {
       type: "array",
@@ -119,6 +125,7 @@ export const configInitTool: Tool = {
 
     const db = params.database;
     const gitlab = params.gitlab;
+    const github = params.github;
     const redis = params.redis;
     const idGenerator = (params.idGenerator as string) ?? "ulid";
     const template = params.templatePath
@@ -130,6 +137,9 @@ export const configInitTool: Tool = {
     const gitlabToken = gitlab?.tokenEnv
       ? `\${${gitlab.tokenEnv}}`
       : (gitlab?.token ?? undefined);
+    const githubToken = github?.tokenEnv
+      ? `\${${github.tokenEnv}}`
+      : (github?.token ?? undefined);
 
     const providerBlocks: string[] = [];
 
@@ -150,6 +160,19 @@ ${yamlJoin(listConnections(db, "database")?.split("\n") ?? [], 4)}`);
           gitlab.projectId
             ? `    projectId: ${q(String(gitlab.projectId))}`
             : undefined,
+        ]
+          .filter((line) => line !== undefined)
+          .join("\n"),
+      );
+    }
+    if (github) {
+      providerBlocks.push(
+        [
+          "  github:",
+          "    enabled: true",
+          `    url: ${q(github.url ?? "https://github.com")}`,
+          githubToken ? `    token: ${q(githubToken)}` : undefined,
+          github.repo ? `    repo: ${q(String(github.repo))}` : undefined,
         ]
           .filter((line) => line !== undefined)
           .join("\n"),
@@ -190,6 +213,7 @@ ${yamlJoin(listConnections(redis, "redis")?.split("\n") ?? [], 4)}`);
         ? [{ provider: "database", connections: db.map((c) => c.name) }]
         : []),
       ...(gitlab ? [{ provider: "gitlab", connections: [] }] : []),
+      ...(github ? [{ provider: "github", connections: [] }] : []),
       ...(redis?.length
         ? [{ provider: "redis", connections: redis.map((c) => c.name) }]
         : []),

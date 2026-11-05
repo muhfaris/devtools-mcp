@@ -133,6 +133,51 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 > message body is often a release note or a paragraph of explanation, which is the bulk of
 > a long log and rarely what the log is being read for.
 
+## GitHub
+
+| Tool | Description |
+| :--- | :--- |
+| `github_list_prs` | List pull requests, with filters. One page of `limit` |
+| `github_get_pr` | Get PR details, commits, and file diffs, with every line numbered for the old and new side. Commit subjects are returned; bodies need `include_messages: true`. A file whose patch GitHub withheld (binary or too large) is marked `diffOmitted`; its additions/deletions still come from the API |
+| `github_review_pr` | Review a PR with file-by-file suggestions. A withheld patch is marked, listed in `filesNotReviewed`, and never counted as reviewed |
+| `github_get_pr_discussions` | Get conversation comments, review comments (with path and line), and review summaries. GitHub REST has no threads or resolved flag, so replies are flat and carry `inReplyTo` |
+| `github_get_file` | Read lines, ranges, or grep a repo file — no clone, up to GitHub's 100 MB raw limit |
+| `github_get_commits` | Commit history for a branch, tag, or path (remote `git log`). One page of `limit`; commit bodies need `include_messages: true` |
+| `github_compare_branches` | Compare refs on the merge base (three-dot, like a PR): commits, per-file change list, ahead/behind, and conflict status read from a matching PR. Patches are opt-in |
+| `github_search_code` | Search code, symbols, or text across a repo (remote `git grep`). Default branch only; one page |
+| `github_create_pr` | Open a pull request from an existing head branch. Does not merge, approve, or assign |
+| `github_update_pr` | Change a PR's base branch, title, or description. Only the fields you pass change; it does not merge or close |
+| `github_create_comment` | Add a conversation comment, or an inline review comment when `path` and `line` are given (anchored to the PR head commit) |
+| `github_update_comment` | Edit an existing PR comment — review or conversation — for when a review comment was wrong |
+| `github_delete_comment` | Delete a PR comment (needs `confirm: true`) |
+| `github_set_config` | Set GitHub token/URL/repo for the session |
+
+> The GitHub write tools are `github_create_pr`, `github_update_pr`,
+> `github_create_comment`, `github_update_comment`, and `github_delete_comment`. Writes
+> are **denied by default**: enable them with `security.allow_write: true` (or
+> `providers.github.security.allow_write: true`), and keep the resolved `owner/name` repo
+> out of `blocked_env`, which defaults to `[production, prod]`.
+>
+> Config: `providers.github.url` is the **web** host (`https://github.com` by default).
+> The REST base is derived from it — `https://api.github.com` for github.com, and
+> `https://<host>/api/v3` for GitHub Enterprise Server. `providers.github.repo` is
+> `owner/name`; a PR URL infers it, and a per-call `repo` overrides it.
+>
+> **Every list tool returns one page** and reports `truncated: true` when that page came
+> back full: `github_get_commits` (`limit`), `github_list_prs` (`limit`),
+> `github_search_code` (`per_page`, with `page` to continue), and `github_get_pr`
+> (100 commits, 100 files, 100 comments each — the `truncated` object says which list
+> stopped at the cap). `github_compare_branches` also sets `filesTruncated` when GitHub
+> returned its 300-file compare ceiling.
+>
+> **Commit bodies are opt-in everywhere**, exactly as on the GitLab side:
+> `github_get_commits`, `github_get_pr`, and `github_compare_branches` return each
+> commit's `title`, and its full `message` only with `include_messages: true`.
+>
+> GitHub's code search indexes the default branch only, caps at 1000 results, and needs a
+> token with repository read access. `incompleteResults: true` means GitHub timed out and
+> the list is partial.
+
 ## Database
 
 | Tool | Description |

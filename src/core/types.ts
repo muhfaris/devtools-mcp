@@ -84,6 +84,7 @@ export interface Config {
 export interface ProvidersConfig {
   database?: DatabaseProviderConfig;
   gitlab?: GitLabProviderConfig;
+  github?: GitHubProviderConfig;
   redis?: RedisProviderConfig;
 }
 
@@ -98,6 +99,25 @@ export interface DatabaseProviderConfig extends DatabaseConfig {
 }
 
 export interface GitLabProviderConfig extends GitLabConfig {
+  enabled?: boolean;
+  security?: ProviderSecurityConfig;
+}
+
+/**
+ * GitHub access.
+ *
+ * `url` is the **web** host, the same way GitLab's is: `https://github.com` or the root of
+ * a GitHub Enterprise Server install. The REST base is derived from it, so a caller never
+ * has to know whether the API lives at `/api/v3`.
+ */
+export interface GitHubConfig {
+  url: string;
+  token: string;
+  /** Repository as `owner/name`. */
+  repo: string;
+}
+
+export interface GitHubProviderConfig extends GitHubConfig {
   enabled?: boolean;
   security?: ProviderSecurityConfig;
 }

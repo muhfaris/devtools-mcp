@@ -63,14 +63,16 @@ graph TB
             Encoding[Encoding Tools<br/>Base64, JWT, Hash]
             Misc[Misc Tools<br/>Cron, Timezone, Semver]
             GitLab[GitLab Tools<br/>List MRs, Review, Comment]
+            GitHub[GitHub Tools<br/>List PRs, Review, Comment]
             DB[Database Tools<br/>Schema, Query, Explain]
-            ConfigTools[Config Tools<br/>gitlab_set_config,<br/>database_set_connection]
+            ConfigTools[Config Tools<br/>gitlab_set_config,<br/>github_set_config,<br/>database_set_connection]
         end
 
         subgraph "Provider Layer"
             Postgres[PostgreSQL Provider]
             MySQL[MySQL Provider]
             GitLabProvider[GitLab Client<br/>@gitbeaker/rest]
+            GitHubProvider[GitHub Client<br/>REST via fetch]
         end
     end
 
@@ -291,6 +293,16 @@ sequenceDiagram
 | Project blocking | `blocked_env` matched against the resolved project path or ID; GitLab inherits the shared list |
 | Rate limiting | Respects GitLab API limits |
 
+### GitHub
+
+| Feature | Implementation |
+| :--- | :--- |
+| Token security | Tokens from env vars, or supplied at runtime by `github_set_config` |
+| No token echo | Tokens never appear in responses; API errors are re-worded, not forwarded |
+| Write gate | `github_create_pr`, `github_update_pr`, `github_create_comment`, `github_update_comment`, and `github_delete_comment` are denied until writes are granted |
+| Repository blocking | `blocked_env` matched against the resolved `owner/name` repository |
+| Rate limiting | A 403 with `x-ratelimit-remaining: 0` is reported as a rate limit with the reset time, not as a permission failure |
+
 ### Redis
 
 | Feature | Implementation |
@@ -334,6 +346,7 @@ credentials, calls the setup tool, then retries the original tool.
 | `tools/encoding/*.test.ts` | Base64, JWT, hash, secret, regex |
 | `tools/misc/*.test.ts` | Cron, timezone, semver, slugify |
 | `tools/gitlab/*.test.ts` | GitLab tools (mocked) |
+| `tools/github/*.test.ts` | GitHub tools (mocked `fetch`) |
 | `tools/database/*.test.ts` | Database tools (mocked) |
 
 ### Mock strategy

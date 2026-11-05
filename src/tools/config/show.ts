@@ -135,6 +135,7 @@ export const getSafeConfigView = (
 ) => {
   const db = getProviderConfig(config, "database");
   const gitlab = getProviderConfig(config, "gitlab");
+  const github = getProviderConfig(config, "github");
   const redis = getProviderConfig(config, "redis");
 
   return {
@@ -188,6 +189,15 @@ export const getSafeConfigView = (
           projectId: gitlab.projectId ?? null,
           security: resolveSecurity(config, "gitlab"),
           token_configured: Boolean(gitlab.token),
+        }
+      : null,
+    github: github
+      ? {
+          enabled: isProviderEnabled(config, "github"),
+          url: github.url || "https://github.com",
+          repo: github.repo ?? null,
+          security: resolveSecurity(config, "github"),
+          token_configured: Boolean(github.token),
         }
       : null,
     redis: redis

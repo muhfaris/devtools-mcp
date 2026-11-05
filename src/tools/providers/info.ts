@@ -141,6 +141,14 @@ export const providersInfoTool: Tool = {
             checked: false,
           }
         : null,
+      github: safeConfig.github
+        ? {
+            enabled: safeConfig.github.enabled,
+            token_configured: safeConfig.github.token_configured,
+            // Spelled out so the report never implies GitHub was probed.
+            checked: false,
+          }
+        : null,
       redis: safeConfig.redis
         ? { ...safeConfig.redis, connections: redisConnections }
         : null,

@@ -4,7 +4,7 @@ import type { Config, ProvidersConfig } from "./types.js";
  * The providers that live under `providers.*`. One union for the whole codebase:
  * the security gates resolve writes by it and the tools use it to find their config.
  */
-export type ProviderName = "database" | "gitlab" | "redis";
+export type ProviderName = "database" | "gitlab" | "github" | "redis";
 
 /**
  * The single place that knows where a provider's config lives.
