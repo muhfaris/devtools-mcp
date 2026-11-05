@@ -7,42 +7,43 @@
 ```bash
 git clone https://github.com/muhfaris/devtools-mcp.git
 cd devtools-mcp
-bun install
+npm install
 ```
 
 ## Run in development mode
 
 ```bash
 # CLI mode
-bun dev generate_ulid
+npm run dev -- generate_ulid
 
 # MCP mode (stdio server)
-bun dev
+npm run dev
 ```
 
 ## Build for production
 
 ```bash
-bun run build
-bun dist/index.js generate_ulid
+npm run build
+node dist/index.js generate_ulid
 ```
 
 ## Run tests
 
 ```bash
-bun test
-bun test --coverage    # with coverage
+npm test            # watch mode (vitest)
+npm run test:ci     # single run - what CI executes
+npx tsc --noEmit    # typecheck
 ```
 
 ## Debug with MCP Inspector
 
 ```bash
 # Run directly from source (no build needed)
-bunx @modelcontextprotocol/inspector bun src/index.ts
+npx @modelcontextprotocol/inspector npx tsx src/index.ts
 
 # Or from built version
-bun run build
-bunx @modelcontextprotocol/inspector bun dist/index.js
+npm run build
+npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
 The Inspector opens a browser UI at `http://localhost:5173` where you can:

@@ -79,7 +79,7 @@ graph TB
         GitLab[(GitLab API)]
     end
 
-    User -->|"bun dev generate_ulid"| CLI
+    User -->|"npm run dev -- generate_ulid"| CLI
     User -->|"Configure .env"| Config
     AI -->|"MCP Protocol"| MCP
 
@@ -188,7 +188,7 @@ sequenceDiagram
     participant Tool
     participant Config
 
-    User->>CLI: bun dev generate_ulid --count 3
+    User->>CLI: npm run dev -- generate_ulid --count 3
     CLI->>CLI: Parse command
     CLI->>Registry: get("generate_ulid")
     Registry-->>CLI: Tool object

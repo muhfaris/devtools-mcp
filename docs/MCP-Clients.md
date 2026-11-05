@@ -114,8 +114,8 @@ Create `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "devtools": {
-      "command": "bun",
-      "args": ["/full/path/to/devtools-mcp/src/index.ts"],
+      "command": "npx",
+      "args": ["tsx", "/full/path/to/devtools-mcp/src/index.ts"],
       "env": {
         "DEV_DATABASE_URL": "postgresql://user:pass@localhost:5432/mydb"
       }
@@ -163,11 +163,11 @@ env = {
 > [Command values](./Configuration.md#command-values-cmd). Configuring one does not
 > configure the other, and this nvim snippet will not make a server-side `cmd:` work.
 
-### Local development with Bun
+### Local development from source
 
 ```lua
 ["devtools"] = {
-  cmd = { "bun", "/path/to/devtools-mcp/src/index.ts" },
+  cmd = { "npx", "tsx", "/path/to/devtools-mcp/src/index.ts" },
   env = {
     DEV_DATABASE_URL = os.getenv("DEV_DATABASE_URL"),
     GITLAB_TOKEN = os.getenv("GITLAB_TOKEN"),
@@ -292,17 +292,17 @@ or use the [wrapper script](#injecting-secrets) above, which fetches the secret 
 npx @modelcontextprotocol/inspector npx @muhfaris/devtools
 ```
 
-### Using Bun (local source)
+### Using the TypeScript source
 
 ```bash
-bunx @modelcontextprotocol/inspector bun src/index.ts
+npx @modelcontextprotocol/inspector npx tsx src/index.ts
 ```
 
 ### Using Node (built version)
 
 ```bash
-bun run build
-bunx @modelcontextprotocol/inspector node dist/index.js
+npm run build
+npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
 ### With environment variables
@@ -310,7 +310,7 @@ bunx @modelcontextprotocol/inspector node dist/index.js
 ```bash
 export GITLAB_TOKEN=glpat-xxx
 export DEV_DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
-bunx @modelcontextprotocol/inspector bun src/index.ts
+npx @modelcontextprotocol/inspector npx tsx src/index.ts
 ```
 
 The Inspector opens a browser at `http://localhost:5173` where you can:
@@ -459,9 +459,9 @@ GRANT SELECT ON information_schema.* TO 'your_user'@'%';
 
 ### MCP Inspector shows "Disconnected"
 
-1. Check that your server runs without errors: `bun dev`
+1. Check that your server runs without errors: `npm run dev`
 2. Verify the command path is correct.
-3. Ensure all dependencies are installed: `bun install`
+3. Ensure all dependencies are installed: `npm install`
 4. Run the server manually first to check for startup errors.
 
 ---

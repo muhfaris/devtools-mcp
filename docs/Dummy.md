@@ -180,17 +180,17 @@ Retrieve official verified public holidays or generate deterministic synthetic t
 
 ```bash
 # Mixed locales (each record random)
-bun dev fake_person --count 4
+npm run dev -- fake_person --count 4
 
 # Force Indonesian
-bun dev fake_person --count 3 --locale id
+npm run dev -- fake_person --count 3 --locale id
 
 # Force Malaysian
-bun dev fake_person --locale my --count 2
+npm run dev -- fake_person --locale my --count 2
 
 # Reproducible output
-bun dev fake_person --count 3 --seed 42
+npm run dev -- fake_person --count 3 --seed 42
 
 # Companies
-bun dev fake_company --count 5
-bun dev fake_company --locale id --count 3
+npm run dev -- fake_company --count 5
+npm run dev -- fake_company --locale id --count 3

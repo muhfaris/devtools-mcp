@@ -43,7 +43,7 @@ Cursor, CodeCompanion.nvim, Codex CLI, and MCP Inspector setups live in
 
 ## What's included
 
-**51 tools**, each exposed twice — as an MCP tool to your agent and as a CLI
+**53 tools**, each exposed twice — as an MCP tool to your agent and as a CLI
 command to your shell.
 
 | Area | Tools |

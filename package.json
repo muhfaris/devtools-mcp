@@ -46,7 +46,7 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "prepublishOnly": "npm run build && npm run test:ci",
-    "inspect": "bunx @modelcontextprotocol/inspector bun src/index.ts"
+    "inspect": "npx @modelcontextprotocol/inspector npx tsx src/index.ts"
   },
   "dependencies": {
     "@faker-js/faker": "^10.6.0",

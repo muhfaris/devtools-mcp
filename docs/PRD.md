@@ -176,10 +176,10 @@ Dikelompokkan per kategori. Kolom **Provider config** menandakan tool yang butuh
 Rincian komponen (Registry, Config Loader, Tool Layer, Provider Layer, MCP Server) ada di **[Architecture.md](./Architecture.md)**.
 
 ### 6.3 Tech Stack (usulan, sesuai stack existing Faris)
-- **Bahasa:** Go — cocok untuk MCP server (concurrency, single binary distribution, gampang di-package sebagai CLI + MCP server sekaligus).
-- **DB driver:** native driver per engine (`pgx` untuk Postgres, `go-sql-driver/mysql` untuk MySQL/MariaDB).
+- **Bahasa:** TypeScript di Node 20.19+ — satu codebase melayani CLI dan MCP server; build ke `dist/` lewat `tsc`.
+- **DB driver:** `pg` (Postgres), `mysql2` (MySQL/MariaDB), `ioredis` (Redis), `@gitbeaker/rest` (GitLab).
 - **Config format:** YAML (`.devtools/config.yaml`).
-- **Distribution:** single binary (via `go install` / release binary), plus opsi npx-wrapper kalau target audiens Node-heavy.
+- **Distribution:** paket npm (`npx @muhfaris/devtools`), Node >= 20.19. Publish lewat GitHub release; lihat [Development.md](./Development.md).
 
 ### 6.4 Konfigurasi Contoh
 Contoh lengkap `.devtools/config.yaml` ada di **[Configuration.md](./Configuration.md)**.
