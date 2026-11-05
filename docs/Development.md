@@ -96,15 +96,24 @@ typechecks, compares the release tag with the `package.json` version, then runs
 failing tree cannot be published — locally or from CI. The job runs Node 22 and
 installs npm 11, because Trusted Publishing needs npm ≥ 11.5.1.
 
-Setup, once: add an npm **automation token** as the `NPM_SECRET` repository secret
-(`NPM_TOKEN` is accepted as an alias).
-npm only attaches a Trusted Publisher to a package that already exists, so the first
-publish needs the token. Provenance requires a public repository.
+Setup, once: add a granular npm token as the `NPM_SECRET` repository secret
+(`NPM_TOKEN` is accepted as an alias). It must have **Bypass two-factor
+authentication** enabled and read-and-write access to all packages. An account
+protected by 2FA rejects any other token with:
 
-After that first publish, configure package settings → Trusted Publisher → GitHub
-Actions for this repository and workflow `publish.yml`, then delete the
-`NPM_SECRET` secret. The workflow reads the secret once and picks the OIDC path when it is
-absent, so no further edit is needed.
+```
+403 Two-factor authentication or granular access token with bypass 2fa enabled
+is required to publish packages
+```
+
+Provenance requires a public repository.
+
+After the first publish, switch to Trusted Publishing: package settings →
+Trusted Publisher → GitHub Actions, repository and workflow `publish.yml`. A new
+configuration must complete a publish within two days, and one created after
+3 Sep 2026 permits staged publishing only unless **npm publish** is also ticked —
+tick it. Then delete the `NPM_SECRET` secret: the workflow reads the secret once
+and takes the OIDC path when it is absent, so no further edit is needed.
 
 Release flow:
 
