@@ -7,10 +7,13 @@ import {
   resolveProjectId,
 } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
+import { diffOmissionReason } from "../../providers/gitlab-diff.js";
+import { countChangedLines } from "../../providers/diff.js";
 import {
-  countChangedLines,
-  diffOmissionReason,
-} from "../../providers/gitlab-diff.js";
+  detectLanguage,
+  estimateComplexity,
+  generateSuggestions,
+} from "../../providers/review-analysis.js";
 
 export const gitlabReviewMrTool: Tool = {
   name: "gitlab_review_mr",
@@ -107,7 +110,7 @@ export const gitlabReviewMrTool: Tool = {
           deletions,
           language,
           complexity: reviewed
-            ? estimateComplexity(file.diff || "", language)
+            ? estimateComplexity(file.diff || "")
             : null,
           reviewed,
           diffOmitted,
@@ -165,95 +168,6 @@ export const gitlabReviewMrTool: Tool = {
     }
   },
 };
-
-function detectLanguage(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() || "";
-  const map: Record<string, string> = {
-    ts: "TypeScript",
-    tsx: "TypeScript (React)",
-    js: "JavaScript",
-    jsx: "JavaScript (React)",
-    py: "Python",
-    go: "Go",
-    rs: "Rust",
-    java: "Java",
-    c: "C",
-    cpp: "C++",
-    h: "C/C++ Header",
-    rb: "Ruby",
-    php: "PHP",
-    css: "CSS",
-    scss: "SCSS",
-    less: "LESS",
-    html: "HTML",
-    vue: "Vue",
-    svelte: "Svelte",
-    json: "JSON",
-    yaml: "YAML",
-    yml: "YAML",
-    toml: "TOML",
-    md: "Markdown",
-    sh: "Shell",
-    bash: "Bash",
-    zsh: "Zsh",
-    sql: "SQL",
-  };
-  return map[ext] || ext || "Unknown";
-}
-
-function estimateComplexity(
-  diff: string,
-  language: string,
-): "low" | "medium" | "high" {
-  const lines = diff.split("\n");
-  const addedLines = lines.filter(
-    (l) => l.startsWith("+") && !l.startsWith("+++"),
-  ).length;
-  const deletedLines = lines.filter(
-    (l) => l.startsWith("-") && !l.startsWith("---"),
-  ).length;
-  const total = addedLines + deletedLines;
-
-  if (total > 100) return "high";
-  if (total > 30) return "medium";
-  return "low";
-}
-
-function generateSuggestions(diff: string, language: string): string[] {
-  const suggestions: string[] = [];
-  const lines = diff.split("\n");
-
-  for (const line of lines) {
-    if (!line.startsWith("+") || line.startsWith("+++")) continue;
-
-    // Check for console.log/print
-    if (/console\.(log|debug|info)/.test(line)) {
-      suggestions.push("Found console.log - consider removing before merge");
-    }
-    if (/fmt\.Println|println!/.test(line)) {
-      suggestions.push("Found print statement - consider using proper logging");
-    }
-
-    // Check for TODO/FIXME
-    if (/TODO|FIXME|HACK|XXX/.test(line)) {
-      suggestions.push("Contains TODO/FIXME comment");
-    }
-
-    // Check for hardcoded secrets patterns
-    if (
-      /(password|secret|api[_-]?key|token)\s*[:=]\s*["'][^"']+["']/i.test(line)
-    ) {
-      suggestions.push("⚠️ Potential hardcoded secret detected");
-    }
-
-    // Check for any type in TS
-    if (language.includes("TypeScript") && /:\s*any\b/.test(line)) {
-      suggestions.push("Use of 'any' type - consider using a specific type");
-    }
-  }
-
-  return [...new Set(suggestions)];
-}
 
 function generateReviewSummary(
   files: any[],

@@ -3,10 +3,8 @@ import { ToolError } from "../../core/errors.js";
 import { isProviderConfigured } from "../../core/provider-config.js";
 import { getGitLabClient, resolveProjectId } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
-import {
-  countChangedLines,
-  diffOmissionReason,
-} from "../../providers/gitlab-diff.js";
+import { diffOmissionReason } from "../../providers/gitlab-diff.js";
+import { countChangedLines } from "../../providers/diff.js";
 
 /** Characters of one file's patch that are inlined before it is cut short. */
 const PATCH_CHARS = 800;

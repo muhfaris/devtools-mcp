@@ -9,11 +9,11 @@ import {
   resolveProjectId,
 } from "../../providers/gitlab.js";
 import { formatGitLabError } from "../../providers/gitlab-error.js";
+import { diffOmissionReason } from "../../providers/gitlab-diff.js";
 import {
   countChangedLines,
-  diffOmissionReason,
   parseDiffLines,
-} from "../../providers/gitlab-diff.js";
+} from "../../providers/diff.js";
 
 export const gitlabGetMrTool: Tool = {
   name: "gitlab_get_mr",

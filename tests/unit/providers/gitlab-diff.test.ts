@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDiffLines } from "../../../src/providers/gitlab-diff.js";
+import { parseDiffLines } from "../../../src/providers/diff.js";
 
 describe("parseDiffLines", () => {
   it("numbers added, removed, and unchanged lines on both sides", () => {
