@@ -22,12 +22,12 @@ jobs:
         # Declared floor in package.json engines, plus the current LTS.
         node: [20, 22]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No lockfile is committed, so `npm ci` cannot run and setup-node's
       # `cache: npm` has no file to hash. A plain install resolves from the
       # semver ranges in package.json.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
