@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Declared floor in package.json engines, plus the current LTS.
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      # No lockfile is committed, so `npm ci` cannot run and setup-node's
+      # `cache: npm` has no file to hash. A plain install resolves from the
+      # semver ranges in package.json.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test:ci

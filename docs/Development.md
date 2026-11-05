@@ -78,29 +78,45 @@ export const exampleTool: Tool = {
 };
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull request,
+on Node 20 (the `engines` floor) and Node 22:
+
+- `npm install` — no lockfile is committed, so `npm ci` cannot run
+- `npx tsc --noEmit`
+- `npm run test:ci` (`vitest run`)
+
 ## Publishing to npm
 
-Publishing requires Node **20.19+** (see `engines`). `prepublishOnly` runs
-`bun run build`, so a publish always ships a fresh `dist/`.
+`.github/workflows/publish.yml` publishes when a GitHub release is published. It
+typechecks, compares the release tag with the `package.json` version, then runs
+`npm publish --provenance`. `prepublishOnly` builds and runs the unit tests, so a
+failing tree cannot be published — locally or from CI.
+
+Setup, once: add an npm **automation token** as the `NPM_TOKEN` repository secret.
+Provenance requires the repository to be public. After the first publish, prefer
+npm Trusted Publishing (package settings → Trusted Publisher → GitHub Actions) and
+delete the secret.
+
+Release flow:
 
 ```bash
-# 1. Build. `npm pack --dry-run` does NOT trigger prepublishOnly, so build first
-#    or you will be inspecting a stale dist/.
-bun run build
-
-# 2. Inspect the tarball - the authoritative list of what ships.
-#    Expected: dist/, .devtools/, README.md, LICENSE
-#    Excluded: src/, tests/, docs/, .codecompanion/, tsconfig.json, vitest.config.ts
-npm pack --dry-run
-
-# 3. Publish. `publishConfig.access` is already public, so no --access flag.
-npm login
-npm publish
-
-# 4. Tag the released commit.
-git tag v0.1.0
-git push --tags
+npm version patch        # bumps package.json and creates the vX.Y.Z tag
+git push --follow-tags
+# create the GitHub release for that tag; CI publishes it
 ```
+
+Manual fallback, from a clean tree:
+
+```bash
+npm run build
+npm pack --dry-run       # does NOT run prepublishOnly; lists what will ship
+npm publish
+```
+
+`files` limits the tarball to `dist/`, `README.md`, `LICENSE`, plus `package.json`.
+`src/`, `tests/`, `docs/`, `.devtools/` and `.github/` never ship.
 
 After publishing, users can run:
 

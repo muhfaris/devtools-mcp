@@ -44,7 +44,8 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest",
-    "prepublishOnly": "npm run build",
+    "test:ci": "vitest run",
+    "prepublishOnly": "npm run build && npm run test:ci",
     "inspect": "bunx @modelcontextprotocol/inspector bun src/index.ts"
   },
   "dependencies": {

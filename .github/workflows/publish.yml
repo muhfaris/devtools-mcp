@@ -1,0 +1,55 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # `npm publish` runs prepublishOnly, which builds and runs the unit tests,
+      # so this workflow does not repeat them.
+      - name: Check the release tag matches package.json
+        if: github.event_name == 'release'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::release tag '$tag' does not match package.json version '$pkg'"
+            exit 1
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          # First publish needs a token: create an automation token on npmjs.com
+          # and store it as the NPM_TOKEN repository secret.
+          #
+          # Provenance needs a public repository and `id-token: write`, both of
+          # which are set here. After the first publish you can drop this token
+          # entirely and use npm Trusted Publishing instead: package settings ->
+          # Trusted Publisher -> GitHub Actions -> this repository and
+          # workflow file name (publish.yml).
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
