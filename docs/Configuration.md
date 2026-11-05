@@ -24,6 +24,13 @@ The **first** match wins, and discovery starts at `process.cwd()`, so launching
 the server from a subdirectory still finds the project config — no need to pass
 the path to each MCP client.
 
+The committed reference is
+[`.devtools/example.config.yaml`](../.devtools/example.config.yaml). Copy it to
+`.devtools/config.yaml` and edit the copy: the loader reads that exact filename
+and nothing else, so the example can sit beside a live config without being
+loaded. `.devtools/config.yaml` is **not tracked** — it holds real tokens and
+DSNs, and a test keeps the example free of credential literals.
+
 ## Full example
 
 ```yaml
