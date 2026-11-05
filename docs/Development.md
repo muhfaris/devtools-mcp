@@ -96,13 +96,14 @@ typechecks, compares the release tag with the `package.json` version, then runs
 failing tree cannot be published — locally or from CI. The job runs Node 22 and
 installs npm 11, because Trusted Publishing needs npm ≥ 11.5.1.
 
-Setup, once: add an npm **automation token** as the `NPM_TOKEN` repository secret.
+Setup, once: add an npm **automation token** as the `NPM_SECRET` repository secret
+(`NPM_TOKEN` is accepted as an alias).
 npm only attaches a Trusted Publisher to a package that already exists, so the first
 publish needs the token. Provenance requires a public repository.
 
 After that first publish, configure package settings → Trusted Publisher → GitHub
-Actions for this repository and workflow `publish.yml`, then delete the `NPM_TOKEN`
-secret. The workflow reads the secret once and picks the OIDC path when it is
+Actions for this repository and workflow `publish.yml`, then delete the
+`NPM_SECRET` secret. The workflow reads the secret once and picks the OIDC path when it is
 absent, so no further edit is needed.
 
 Release flow:

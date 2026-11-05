@@ -19,7 +19,8 @@ jobs:
     # Read once, so the publish steps can branch on it: `secrets` is not usable in
     # a step `if`, `env` is.
     env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Either secret name works: NPM_SECRET is what the repository currently holds.
+      NPM_AUTH: ${{ secrets.NPM_SECRET || secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -55,10 +56,10 @@ jobs:
       # The auth line lives in ~/.npmrc rather than setup-node's `registry-url`,
       # which writes `_authToken=${NODE_AUTH_TOKEN}` unconditionally: the OIDC step
       # has no such variable, and npm fails to parse the file when it is missing.
-      - name: Publish with the NPM_TOKEN secret
-        if: env.NPM_TOKEN != ''
+      - name: Publish with the stored token
+        if: env.NPM_AUTH != ''
         env:
-          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ env.NPM_AUTH }}
         run: |
           echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
           npm publish --provenance --access public
@@ -68,5 +69,5 @@ jobs:
       # NPM_TOKEN secret. This step then authenticates over OIDC: no long-lived
       # token anywhere, and provenance is signed the same way.
       - name: Publish with Trusted Publishing (OIDC)
-        if: env.NPM_TOKEN == ''
+        if: env.NPM_AUTH == ''
         run: npm publish --provenance --access public
