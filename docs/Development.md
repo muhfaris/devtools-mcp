@@ -88,6 +88,12 @@ on Node 20 (the `engines` floor) and Node 22:
 - `npx tsc --noEmit`
 - `npm run test:ci` (`vitest run`)
 
+npm 12, generally available since July 2026, stops running dependency lifecycle
+scripts on install unless they are allowlisted. Two packages in this tree have a
+`postinstall` (`esbuild`, `@modelcontextprotocol/inspector`); neither is needed to
+typecheck or test on a linux-x64 runner, so no allowlist is committed. The publish
+job pins npm 11, which still runs them.
+
 ## Publishing to npm
 
 `.github/workflows/publish.yml` publishes when a GitHub release is published. It
@@ -107,6 +113,12 @@ is required to publish packages
 ```
 
 Provenance requires a public repository.
+
+> **The token is a stopgap.** npm has begun retiring it: since August 2026 a
+> 2FA-bypass token can no longer manage packages, and from around January 2027 it
+> can only read private packages and stage a publish. Move the release to Trusted
+> Publishing as soon as the first publish lands; `npm stage publish` plus a human
+> 2FA approval is the fallback when a review gate is wanted.
 
 After the first publish, switch to Trusted Publishing: package settings →
 Trusted Publisher → GitHub Actions, repository and workflow `publish.yml`. A new
