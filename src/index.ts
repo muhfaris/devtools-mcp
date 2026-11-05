@@ -28,8 +28,19 @@ const main = async () => {
         for (const [key, schema] of Object.entries(tool.params)) {
           const needsValue =
             schema.type === "string" || schema.type === "number";
-          const flag = needsValue ? `--${key} <${key}>` : `--${key}`;
-          cmd.option(flag, schema.description || key);
+          // A boolean that defaults to true is already on; a bare `--key` flag could
+          // only turn it on again. Commander's negation form is the only way to say
+          // "off", and it also supplies the default, so no separate default is passed.
+          const defaultsOn = schema.type === "boolean" && schema.default === true;
+          const flag = needsValue
+            ? `--${key} <${key}>`
+            : defaultsOn
+              ? `--no-${key}`
+              : `--${key}`;
+          const description = defaultsOn
+            ? `${schema.description || key} Pass --no-${key} to turn it off.`
+            : schema.description || key;
+          cmd.option(flag, description);
         }
       }
 
