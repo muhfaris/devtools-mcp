@@ -31,6 +31,7 @@ import { gitlabGetFileTool } from "./gitlab/get-file.js";
 import { gitlabGetCommitsTool } from "./gitlab/get-commits.js";
 import { gitlabCompareBranchesTool } from "./gitlab/compare-branches.js";
 import { gitlabSearchCodeTool } from "./gitlab/search-code.js";
+import { gitlabSearchProjectsTool } from "./gitlab/search-projects.js";
 import { gitlabSetConfigTool } from "./gitlab/set-config.js";
 import { githubListPrsTool } from "./github/list-prs.js";
 import { githubGetPrTool } from "./github/get-pr.js";
@@ -107,6 +108,7 @@ export const registerAllTools = async (
   registry.register(gitlabGetCommitsTool);
   registry.register(gitlabCompareBranchesTool);
   registry.register(gitlabSearchCodeTool);
+  registry.register(gitlabSearchProjectsTool);
   registry.register(getDbSchemaTool);
   registry.register(executeQueryTool);
   registry.register(explainQueryTool);

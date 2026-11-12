@@ -81,6 +81,7 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 | `gitlab_get_commits` | Commit history for a branch, tag, or path (remote `git log`). One page of `limit`; commit bodies need `include_messages: true` |
 | `gitlab_compare_branches` | Compare refs: commits, a per-file change list, and conflict status. Patches are opt-in (`include_diff: true`) |
 | `gitlab_search_code` | Search code, symbols, or text across a repo (remote `git grep`). One page |
+| `gitlab_search_projects` | Find projects by name or path, to get the `project_id` the other `gitlab_*` tools need. Optional `group` limits it to one group and its subgroups. One page |
 | `gitlab_create_mr` | Open a merge request from an existing source branch. Does not merge, approve, or assign |
 | `gitlab_update_mr` | Change an MR's target branch, title, or description. Only the fields you pass change; it does not merge or close |
 | `gitlab_create_note` | Add a comment to an MR (inline diff comments supported) |
@@ -105,6 +106,7 @@ See [Dummy Data Guide](./Dummy.md) for full locale support (`en`, `id`, `my`, `s
 > | `gitlab_get_commits` | `limit` (default 10, max 100) |
 > | `gitlab_list_mrs` | `limit` (default 20, max 100) |
 > | `gitlab_search_code` | `per_page` (default 20, max 100), with `page` to go on |
+> | `gitlab_search_projects` | `per_page` (default 20, max 100), with `page` to go on |
 > | `gitlab_get_mr_discussions` | 100 discussions |
 > | `gitlab_get_mr` | 100 commits and 100 notes, reported as `truncated` |
 >
